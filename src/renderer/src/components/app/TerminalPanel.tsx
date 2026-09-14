@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { detectPlatformSync } from "@/lib/platform";
 import { useShortcut } from "@/lib/use-shortcut";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ const serviceTerminals: Array<{ serviceId: ServiceId; sessionId: string; title: 
 ];
 
 const USER_TERMINAL_SESSION_PREFIX = "user-terminal:";
+const IS_WINDOWS_PLATFORM = detectPlatformSync() === "win32";
 const MIN_VISIBLE_TERMINAL_WIDTH = 240;
 const MIN_VISIBLE_TERMINAL_HEIGHT = 120;
 const TERMINAL_LINK_PATTERN = /\b(?:https?:\/\/[^\s<>"'，。；）\])]+|logs\/[^\s<>"'，。；）\])]+\.(?:html|txt|json|log))/giu;
@@ -382,6 +384,7 @@ export function TerminalPanel({
         rescaleOverlappingGlyphs: true,
         scrollback: 100_000,
         tabStopWidth: 8,
+        ...(IS_WINDOWS_PLATFORM ? { windowsPty: { backend: "conpty" as const } } : {}),
         theme: XTERM_THEME,
       });
       const fitAddon = new FitAddon();

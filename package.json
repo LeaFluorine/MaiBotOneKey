@@ -1,6 +1,6 @@
 {
   "name": "maibot-onekey-desktop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Electron shell for MaiBot OK.",
   "author": "![1779700604525](image/package/1779700604525.png)MotricSeven",
   "license": "GPL-3.0-only",
@@ -146,27 +146,6 @@
           "!napcat/versions/**/resources/app/napcat/logs/**",
           "!napcat/versions/**/resources/app/napcat/temp/**",
           "!napcat/versions/**/resources/app/napcat/tmp/**"
-        ]
-      },
-      {
-        "from": "modules/MaiBot/plugins/napcat-adapter",
-        "to": "modules/MaiBot/plugins/napcat-adapter",
-        "filter": [
-          "**/*",
-          "!**/.git/**",
-          "!**/__pycache__/**",
-          "!**/*.pyc",
-          "!**/config.toml",
-          "!**/config.toml.*",
-          "!**/config_back/**",
-          "!**/data/**",
-          "!**/logs/**",
-          "!**/*.bak",
-          "!**/*.backup*",
-          "!**/*.db",
-          "!**/*.sqlite",
-          "!**/*.sqlite3",
-          "!**/*.log"
         ]
       },
       {

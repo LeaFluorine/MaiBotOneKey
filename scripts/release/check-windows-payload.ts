@@ -118,11 +118,6 @@ const requirements: Requirement[] = [
     candidates: [file("modules/MaiBot/bot.py")],
   },
   {
-    label: "MaiBot napcat-adapter plugin",
-    required: true,
-    candidates: [dir("modules/MaiBot/plugins/napcat-adapter")],
-  },
-  {
     label: "MaiBot snowluma-adapter plugin",
     required: true,
     candidates: [dir("modules/MaiBot/plugins/snowluma-adapter")],

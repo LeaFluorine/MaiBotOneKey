@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 - 2026-09-27
+
+- 内置 SnowLuma 预置包更新到官方 v1.14.20 Windows x64 完整包。
+- 切换 NapCat / SnowLuma 时分别记住适配器当前的 WebSocket 端口和 token，并恢复目标协议端上次的连接配置；首次切换默认使用 7988 端口和新 token。
+- NapCat 和 SnowLuma 统一使用 QQ 适配器，保留已有插件设置，并将配置入口跳转到 Dashboard 适配器管理页。
+- 修复简单聊聊连接时特殊字符 token 的认证问题，并完善连接失败提示。
+
 ## 0.5.0 - 2026-08-19
 
 - 移除一键包独立的插件标签页，插件管理与插件市场统一交由 MaiBot Dashboard 提供。

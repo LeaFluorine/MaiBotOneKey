@@ -28,6 +28,16 @@ const MESSAGE_HISTORY_LIMIT = 120;
 const WS_REQUEST_TIMEOUT_MS = 8_000;
 const REPLY_MESSAGE_PREFIX = /^\s*\[回复消息\]\s*/u;
 
+// Starlette parses Cookie values with Python's SimpleCookie, which unquotes
+// backslash/octal escapes but does not URL-decode percent escapes.
+export function webuiSessionCookie(token: string): string {
+  const escaped = token.replace(/[\x00-\x20\x7f-\xff"\\;,]/gu, (character) => {
+    if (character === '"' || character === "\\") return `\\${character}`;
+    return `\\${character.charCodeAt(0).toString(8).padStart(3, "0")}`;
+  });
+  return `maibot_session="${escaped}"`;
+}
+
 interface LocalChatSessionOptions {
   client: LocalChatClientInfo;
   sessionId: string;
@@ -828,7 +838,7 @@ export class LocalChatAdapter extends EventEmitter {
 
     await new Promise<void>((resolve, reject) => {
       const socket = new WebSocket(this.currentUrl, {
-        headers: token ? { Cookie: `maibot_session=${encodeURIComponent(token)}` } : {},
+        headers: token ? { Cookie: webuiSessionCookie(token) } : {},
       });
       let settled = false;
       const timeout = setTimeout(() => {
@@ -855,9 +865,13 @@ export class LocalChatAdapter extends EventEmitter {
         void this.initializeSession(this.activeSession).then(() => finish()).catch(finish);
       });
       socket.on("message", (data) => this.handleSocketMessage(data));
-      socket.on("error", () => {
+      socket.on("error", (error: Error & { code?: string }) => {
         this.setState("error");
-        finish(new Error(`无法连接 MaiBot 简单聊聊：${origin}`));
+        const status = /Unexpected server response: (\d+)/u.exec(error.message)?.[1];
+        const detail = status === "401" || status === "403"
+          ? `认证失败（HTTP ${status}），请检查 WebUI token`
+          : status ? `HTTP ${status}` : error.code ?? "WebSocket 握手失败";
+        finish(new Error(`无法连接 MaiBot 简单聊聊：${origin}（${detail}）`));
       });
       socket.on("close", () => {
         this.rejectPendingRequests(new Error("简单聊聊连接已断开"));

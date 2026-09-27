@@ -1,6 +1,6 @@
 ﻿import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type {
   ManagedSourceEntry,
@@ -356,71 +356,6 @@ export class ModuleUpdater {
     }
 
     return candidates;
-  }
-
-  /**
-   * 直接用一键包内置的 napcat-adapter 快照覆盖可写目录里的对应插件，不走任何网络。
-   * 适用场景：用户因 .gitignore 历史问题导致 plugins/napcat-adapter/runtime/ 缺失，
-   * 报 `[E_PLUGIN_NOT_FOUND] No module named '_maibot_plugin_maibot_team_napcat_adapter.runtime'`，
-   * 又不想等 git fetch 联网。强制清空再整目录复制 bundled 快照。
-   */
-  async repairNapcatAdapterFromBundled(): Promise<ModuleUpdateResult> {
-    const moduleId: ModuleUpdateResult["moduleId"] = "napcat-adapter";
-    const moduleName = "napcat-adapter";
-    const cwd = join(this.paths.maibotRoot, "plugins", "napcat-adapter");
-    const bundled = join(this.paths.bundledModulesRoot, "MaiBot", "plugins", "napcat-adapter");
-    const gitPath = this.initManager.getGitPath();
-    const output: string[] = [];
-
-    if (!existsSync(bundled)) {
-      throw new Error(`一键包内置的 napcat-adapter 模板缺失: ${bundled}`);
-    }
-    let bundledStat: Awaited<ReturnType<typeof stat>>;
-    try {
-      bundledStat = await stat(bundled);
-    } catch (err) {
-      throw new Error(`无法读取一键包内置 napcat-adapter 模板: ${toDetail(err)}`);
-    }
-    if (!bundledStat.isDirectory()) {
-      throw new Error(`一键包内置 napcat-adapter 路径不是目录: ${bundled}`);
-    }
-
-    output.push(`[${moduleName}] 使用一键包内置快照修复（不联网，强制覆盖整个插件目录）。`);
-    output.push(`[${moduleName}] 来源: ${bundled}`);
-    output.push(`[${moduleName}] 目标: ${cwd}`);
-
-    if (existsSync(cwd)) {
-      output.push(`[${moduleName}] 删除既有目录...`);
-      await rm(cwd, { recursive: true, force: true });
-    }
-
-    output.push(`[${moduleName}] 复制内置快照...`);
-    await cp(bundled, cwd, {
-      recursive: true,
-      force: true,
-      errorOnExist: false,
-    });
-
-    let after: string | undefined;
-    if (existsSync(join(cwd, ".git"))) {
-      after = await this.readGitValue(gitPath, cwd, ["rev-parse", "--short", "HEAD"]);
-    }
-
-    output.push(`[${moduleName}] ✓ 修复完成。`);
-
-    return {
-      moduleId,
-      moduleName,
-      cwd,
-      gitPath,
-      changed: true,
-      after,
-      output,
-      updatedAt: Date.now(),
-      source: "bundled",
-      warning:
-        "已使用一键包内置 napcat-adapter 快照覆盖修复。此快照与本一键包发布日同步，可能落后于上游最新代码；建议稍后在网络恢复时点击「更新 MaiBot」拉取最新版本。",
-    };
   }
 
   private async updateGitRepository(

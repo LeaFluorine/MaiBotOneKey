@@ -960,7 +960,7 @@ function normalizeNapcatAdapterConfig(
 ): NapcatAdapterConfig {
   const pluginRaw = (raw["plugin"] as Record<string, unknown> | undefined) ?? {};
   const serverRaw =
-    ((raw["napcat_server"] ?? raw["luma_client"] ?? raw["connection"]) as Record<string, unknown> | undefined) ?? {};
+    (raw["client"] as Record<string, unknown> | undefined) ?? {};
   const chatRaw = (raw["chat"] as Record<string, unknown> | undefined) ?? {};
   const filtersRaw = (raw["filters"] as Record<string, unknown> | undefined) ?? {};
 
@@ -970,9 +970,9 @@ function normalizeNapcatAdapterConfig(
       configVersion: asString(pluginRaw["config_version"], defaults.plugin.configVersion),
     },
     server: {
-      host: asString(serverRaw["host"] ?? serverRaw["server"], defaults.server.host).trim() || defaults.server.host,
+      host: asString(serverRaw["server"], defaults.server.host).trim() || defaults.server.host,
       port: asPositiveInt(serverRaw["port"], defaults.server.port),
-      token: asString(serverRaw["token"] ?? serverRaw["access_token"], defaults.server.token),
+      token: asString(serverRaw["token"], defaults.server.token),
       heartbeatInterval: asPositiveNumber(
         serverRaw["heartbeat_interval"] ?? serverRaw["heartbeat_sec"],
         defaults.server.heartbeatInterval,
@@ -1009,45 +1009,13 @@ function normalizeNapcatAdapterConfig(
   };
 }
 
-function napcatAdapterConfigToToml(config: NapcatAdapterConfig): string {
-  const document = {
-    plugin: {
-      enabled: config.plugin.enabled,
-      config_version: config.plugin.configVersion,
-    },
-    napcat_server: {
-      host: config.server.host,
-      port: config.server.port,
-      token: config.server.token,
-      heartbeat_interval: config.server.heartbeatInterval,
-      reconnect_delay_sec: config.server.reconnectDelaySec,
-      action_timeout_sec: config.server.actionTimeoutSec,
-      connection_id: config.server.connectionId,
-    },
-    chat: {
-      enable_chat_list_filter: config.chat.enableChatListFilter,
-      show_dropped_chat_list_messages: config.chat.showDroppedChatListMessages,
-      group_list_type: config.chat.groupListType,
-      group_list: config.chat.groupList,
-      private_list_type: config.chat.privateListType,
-      private_list: config.chat.privateList,
-      ban_user_id: config.chat.banUserId,
-      ban_qq_bot: config.chat.banQqBot,
-    },
-    filters: {
-      ignore_self_message: config.filters.ignoreSelfMessage,
-    },
-  } as const;
-  return stringifyToml(document);
-}
-
 function snowlumaAdapterConfigToToml(config: NapcatAdapterConfig): string {
   const document = {
     plugin: {
       enabled: config.plugin.enabled,
       config_version: config.plugin.configVersion,
     },
-    luma_client: {
+    client: {
       server: config.server.host,
       port: config.server.port,
       token: config.server.token,
@@ -1095,7 +1063,7 @@ function hasUsableWebsocketServerConfig(server: NapcatWebsocketServerConfig | un
     server?.host.trim()
     && Number.isFinite(server.port)
     && server.port > 0
-    && server.token.trim(),
+    && server.port <= 65535,
   );
 }
 
@@ -1394,27 +1362,95 @@ export class InitManager {
     backend: QqBackend,
     options: { syncAdapters?: boolean } & InitRepairOptions = {},
   ): Promise<void> {
-    await mkdir(dirname(this.qqBackendPath()), { recursive: true });
-    await writeFile(
-      this.qqBackendPath(),
-      `${JSON.stringify({ version: 1, backend, updatedAt: Date.now() }, null, 2)}\n`,
-      "utf8",
-    );
-    await this.ensureServiceReady("napcat");
-    if (options.syncAdapters !== false) {
-      const qqAccount = await this.readConfiguredQqAccount();
-      if (qqAccount) {
-        const syncedPaths = await this.syncSelectedQqAdapterConfigs({
-          resetInvalidConfig: options.resetInvalidAdapterConfigs,
-        });
-        const selectedConfigPath = backend === "snowluma"
-          ? this.snowlumaAdapterConfigPath()
-          : this.napcatAdapterConfigPath();
-        if (syncedPaths.some((path) => samePath(path, selectedConfigPath))) {
-          await this.markMessagePlatformConfigured(backend, qqAccount, backend);
+    const statePath = this.qqBackendPath();
+    const previousState = await readFile(statePath, "utf8").catch(() => undefined);
+    const previousBackend = this.getQqBackendSync();
+    const connections = this.readQqBackendConnections();
+    const switching = backend !== previousBackend && this.hasMessagePlatformConfigured();
+    const configPath = this.snowlumaAdapterConfigPath();
+    const previousConfig = await readFile(configPath, "utf8").catch(() => undefined);
+    const adapterServer = await this.readAdapterServerFromConfig("snowluma");
+    let configChanged = false;
+    if (switching) {
+      if (hasUsableWebsocketServerConfig(adapterServer)) {
+        connections[previousBackend] = { port: adapterServer.port, token: adapterServer.token };
+      }
+      connections[backend] = {
+        port: connections[backend]?.port ?? SNOWLUMA_ONEBOT_PORT,
+        token: connections[backend]?.token ?? createWebsocketToken(),
+      };
+    }
+
+    try {
+      if (switching && previousConfig !== undefined) {
+        try {
+          const document = parseToml(previousConfig);
+          if (!document.client || typeof document.client !== "object" || Array.isArray(document.client)) {
+            document.client = {};
+          }
+          const client = document.client as Record<string, unknown>;
+          const target = connections[backend]!;
+          if (client.port !== target.port || client.token !== target.token) {
+            client.port = target.port;
+            client.token = target.token!;
+            await writeFile(configPath, stringifyToml(document), "utf8");
+            configChanged = true;
+          }
+        } catch (error) {
+          if (!options.resetInvalidAdapterConfigs) {
+            throw new AdapterConfigParseError("snowluma", configPath, error);
+          }
         }
       }
+      await mkdir(dirname(statePath), { recursive: true });
+      await writeFile(
+        statePath,
+        `${JSON.stringify({ version: 1, backend, connections, updatedAt: Date.now() }, null, 2)}\n`,
+        "utf8",
+      );
+      await this.ensureServiceReady("napcat");
+      if (options.syncAdapters !== false) {
+        const qqAccount = await this.readConfiguredQqAccount();
+        if (qqAccount) {
+          const syncedPaths = await this.syncSelectedQqAdapterConfigs({
+            resetInvalidConfig: options.resetInvalidAdapterConfigs,
+          });
+          if (syncedPaths.some((path) => samePath(path, configPath))) {
+            await this.markMessagePlatformConfigured(backend, qqAccount, backend);
+          }
+        }
+      }
+    } catch (error) {
+      if (configChanged && previousConfig !== undefined) {
+        await writeFile(configPath, previousConfig, "utf8");
+      }
+      if (previousState !== undefined) {
+        await writeFile(statePath, previousState, "utf8");
+      } else {
+        await rm(statePath, { force: true });
+      }
+      throw error;
     }
+  }
+
+  private readQqBackendConnections(): Partial<Record<QqBackend, { port: number; token?: string }>> {
+    const connections: Partial<Record<QqBackend, { port: number; token?: string }>> = {};
+    try {
+      const stored = JSON.parse(readFileSync(this.qqBackendPath(), "utf8"));
+      for (const backend of ["napcat", "snowluma"] as const) {
+        const saved = stored.connections?.[backend];
+        const port = saved?.port ?? stored.ports?.[backend];
+        if (Number.isInteger(port) && port >= 1 && port <= 65535) {
+          connections[backend] = {
+            port,
+            token: typeof saved?.token === "string" ? saved.token : undefined,
+          };
+        }
+      }
+    } catch {
+      // Older installations have no per-backend connection history.
+    }
+    return connections;
   }
 
   async getState(options: { refreshDependencies?: boolean } = {}): Promise<InitState> {
@@ -2473,18 +2509,19 @@ export class InitManager {
       throw new Error("QQ 号必须是纯数字");
     }
 
-    await this.setQqBackend(qqBackend, { syncAdapters: false });
+    await this.setQqBackend(qqBackend, { ...options, syncAdapters: false });
     await this.ensureServiceReady("maibot");
     const existingWebsocketServer = qqBackend === "snowluma"
       ? await this.readSnowLumaWebsocketServer(qqAccount)
       : await this.readNapcatWebsocketServer(qqAccount);
-    const adapterWebsocketServer = await this.readAdapterServerFromConfig(qqBackend);
-    const configuredWebsocketServer = existingWebsocketServer
-      ?? (hasUsableWebsocketServerConfig(adapterWebsocketServer) ? adapterWebsocketServer : undefined);
+    const adapterWebsocketServer = await this.readAdapterServerFromConfig("snowluma");
+    const configuredWebsocketServer = hasUsableWebsocketServerConfig(adapterWebsocketServer)
+      ? adapterWebsocketServer
+      : existingWebsocketServer;
     const resolvedWebsocketServer: NapcatWebsocketServerConfig = {
       host: configuredWebsocketServer?.host || NAPCAT_ADAPTER_HOST,
-      port: configuredWebsocketServer?.port || (qqBackend === "snowluma" ? SNOWLUMA_ONEBOT_PORT : NAPCAT_ADAPTER_PORT),
-      token: configuredWebsocketServer?.token || websocketToken || createWebsocketToken(),
+      port: adapterWebsocketServer?.port || this.readQqBackendConnections()[qqBackend]?.port || configuredWebsocketServer?.port || SNOWLUMA_ONEBOT_PORT,
+      token: adapterWebsocketServer?.token ?? this.readQqBackendConnections()[qqBackend]?.token ?? configuredWebsocketServer?.token ?? websocketToken ?? createWebsocketToken(),
     };
 
     if (qqBackend === "snowluma") {
@@ -2493,10 +2530,8 @@ export class InitManager {
       await this.createNapCatConfigs(qqAccount, resolvedWebsocketServer.token, resolvedWebsocketServer.port);
       await this.ensureNapCatWebUiConfig();
     }
-    const initializedAdapterConfig = await this.writeQqAdapterConfigsForBackend(
-      qqBackend,
+    const initializedAdapterConfig = await this.ensureQqAdapterConfig(
       resolvedWebsocketServer,
-      qqAccount,
       chatOverrides,
       { resetInvalidConfig: options.resetInvalidAdapterConfigs },
     );
@@ -2591,51 +2626,25 @@ export class InitManager {
     }
   }
 
-  /**
-   * Create/update napcat-adapter config.toml. The token comes from the current setQqAccount flow.
-   * Chat settings use values entered in the setup UI, falling back to defaults when absent.
-   */
-  private async writeQqAdapterConfigsForBackend(
-    qqBackend: QqBackend,
-    selectedWebsocketServer: NapcatWebsocketServerConfig,
-    qqAccount?: string,
+  // Both QQ backends use the unified SnowLuma adapter. Existing plugin
+  // settings belong to the user and must not be toggled when selecting a backend.
+  private async ensureQqAdapterConfig(
+    websocketServer: NapcatWebsocketServerConfig,
     chatOverrides?: Partial<NapcatAdapterChatConfig>,
     options: AdapterConfigWriteOptions = {},
   ): Promise<boolean> {
-    const napcatServer = qqBackend === "napcat"
-      ? selectedWebsocketServer
-      : await this.resolveNapcatAdapterServer(qqAccount);
-    const snowlumaServer = qqBackend === "snowluma"
-      ? selectedWebsocketServer
-      : await this.resolveSnowLumaAdapterServer(qqAccount);
-
-    if (qqBackend === "snowluma") {
-      const wroteInactive = await this.writeNapcatAdapterConfigForServer(napcatServer, chatOverrides, false, options);
-      const wroteSelected = await this.writeSnowLumaAdapterConfigForServer(snowlumaServer, chatOverrides, true, options);
-      return wroteSelected || wroteInactive;
+    const configPath = this.snowlumaAdapterConfigPath();
+    if (existsSync(configPath)) {
+      try {
+        parseToml(await readFile(configPath, "utf8"));
+        return false;
+      } catch (error) {
+        if (!options.resetInvalidConfig) {
+          throw new AdapterConfigParseError("snowluma", configPath, error);
+        }
+      }
     }
-
-    const wroteSelected = await this.writeNapcatAdapterConfigForServer(napcatServer, chatOverrides, true, options);
-    const wroteInactive = await this.writeSnowLumaAdapterConfigForServer(snowlumaServer, chatOverrides, false, options);
-    return wroteSelected || wroteInactive;
-  }
-
-  private async resolveNapcatAdapterServer(qqAccount?: string): Promise<NapcatWebsocketServerConfig> {
-    const existing = await this.readNapcatWebsocketServer(qqAccount);
-    return {
-      host: NAPCAT_ADAPTER_HOST,
-      port: NAPCAT_ADAPTER_PORT,
-      token: existing?.token || createWebsocketToken(),
-    };
-  }
-
-  private async resolveSnowLumaAdapterServer(qqAccount?: string): Promise<NapcatWebsocketServerConfig> {
-    const existing = await this.readSnowLumaWebsocketServer(qqAccount);
-    return {
-      host: NAPCAT_ADAPTER_HOST,
-      port: SNOWLUMA_ONEBOT_PORT,
-      token: existing?.token || createWebsocketToken(),
-    };
+    return this.writeSnowLumaAdapterConfigForServer(websocketServer, chatOverrides, options);
   }
 
   private async syncSelectedQqAdapterConfigs(options: AdapterConfigWriteOptions = {}): Promise<string[]> {
@@ -2645,14 +2654,18 @@ export class InitManager {
     }
 
     const qqBackend = await this.readQqBackend();
+    const adapterServer = await this.readAdapterServerFromConfig("snowluma");
     let websocketServer = qqBackend === "snowluma"
       ? await this.readSnowLumaWebsocketServer(qqAccount)
       : await this.readNapcatWebsocketServer(qqAccount);
 
+    if (hasUsableWebsocketServerConfig(adapterServer)) {
+      websocketServer = adapterServer;
+    }
     websocketServer = {
       host: websocketServer?.host || NAPCAT_ADAPTER_HOST,
-      port: websocketServer?.port || (qqBackend === "snowluma" ? SNOWLUMA_ONEBOT_PORT : NAPCAT_ADAPTER_PORT),
-      token: websocketServer?.token || createWebsocketToken(),
+      port: adapterServer?.port || this.readQqBackendConnections()[qqBackend]?.port || websocketServer?.port || SNOWLUMA_ONEBOT_PORT,
+      token: adapterServer?.token ?? this.readQqBackendConnections()[qqBackend]?.token ?? websocketServer?.token ?? createWebsocketToken(),
     };
     if (qqBackend === "snowluma") {
       await this.createSnowLumaConfigs(qqAccount, websocketServer.token, websocketServer.port);
@@ -2661,68 +2674,13 @@ export class InitManager {
       await this.ensureNapCatWebUiConfig();
     }
 
-    await this.writeQqAdapterConfigsForBackend(qqBackend, websocketServer, qqAccount, undefined, options);
-    return [
-      this.napcatAdapterConfigPath(),
-      this.snowlumaAdapterConfigPath(),
-    ].filter((path) => existsSync(path));
-  }
-
-  private async writeNapcatAdapterConfigForServer(
-    websocketServer: NapcatWebsocketServerConfig,
-    chatOverrides?: Partial<NapcatAdapterChatConfig>,
-    enabled = true,
-    options: AdapterConfigWriteOptions = {},
-  ): Promise<boolean> {
-    const defaults = buildDefaultNapcatAdapterConfig(websocketServer.token, websocketServer.port);
-    let existing: NapcatAdapterConfig = defaults;
-    const configPath = this.napcatAdapterConfigPath();
-    const adapterRoot = dirname(configPath);
-
-    if (!existsSync(adapterRoot)) {
-      if (enabled) {
-        throw new Error(`NapCat 适配器目录不存在，无法写入配置: ${adapterRoot}`);
-      }
-      return false;
-    }
-
-    if (existsSync(configPath)) {
-      try {
-        const text = await readFile(configPath, "utf8");
-        const parsed = parseToml(text);
-        if (parsed && typeof parsed === "object") {
-          existing = normalizeNapcatAdapterConfig(parsed as Record<string, unknown>, defaults);
-        }
-      } catch (error) {
-        if (!options.resetInvalidConfig) {
-          throw new AdapterConfigParseError("napcat", configPath, error);
-        }
-      }
-    }
-
-    const merged: NapcatAdapterConfig = {
-      ...existing,
-      plugin: {
-        enabled,
-        configVersion: NAPCAT_ADAPTER_CONFIG_VERSION,
-      },
-      server: {
-        ...existing.server,
-        host: websocketServer.host,
-        port: websocketServer.port,
-        token: websocketServer.token,
-      },
-      chat: applyChatOverrides(existing.chat, chatOverrides),
-    };
-
-    await writeFile(configPath, napcatAdapterConfigToToml(merged), "utf8");
-    return true;
+    await this.ensureQqAdapterConfig(websocketServer, undefined, options);
+    return [this.snowlumaAdapterConfigPath()].filter((path) => existsSync(path));
   }
 
   private async writeSnowLumaAdapterConfigForServer(
     websocketServer: NapcatWebsocketServerConfig,
     chatOverrides?: Partial<NapcatAdapterChatConfig>,
-    enabled = true,
     options: AdapterConfigWriteOptions = {},
   ): Promise<boolean> {
     const defaults = buildDefaultNapcatAdapterConfig(websocketServer.token, websocketServer.port);
@@ -2734,10 +2692,7 @@ export class InitManager {
     const adapterRoot = dirname(configPath);
 
     if (!existsSync(adapterRoot)) {
-      if (enabled) {
-        throw new Error(`SnowLuma 适配器目录不存在，无法写入配置: ${adapterRoot}`);
-      }
-      return false;
+      throw new Error(`QQ 适配器目录不存在，无法写入配置: ${adapterRoot}`);
     }
 
     if (existsSync(configPath)) {
@@ -2757,7 +2712,7 @@ export class InitManager {
     const merged: NapcatAdapterConfig = {
       ...existing,
       plugin: {
-        enabled,
+        enabled: existing.plugin.enabled,
         configVersion: SNOWLUMA_ADAPTER_CONFIG_VERSION,
       },
       server: {
@@ -2791,7 +2746,6 @@ export class InitManager {
       const changedFiles = await this.ensureBundledModuleSubtree("MaiBot", ["bot.py"], {
         excludeRelativePaths: [NAPCAT_ADAPTER_DIR, SNOWLUMA_ADAPTER_DIR],
       });
-      changedFiles.push(...(await this.ensureBundledMaiBotPluginSubtree(NAPCAT_ADAPTER_DIR, ["plugin.py"], NAPCAT_ADAPTER_PLUGIN_ID)));
       changedFiles.push(...(await this.ensureBundledMaiBotPluginSubtree(SNOWLUMA_ADAPTER_DIR, ["plugin.py"], SNOWLUMA_ADAPTER_PLUGIN_ID)));
       const repairedConfig = await this.repairBotConfigVersionInfo();
       return [...changedFiles, ...(repairedConfig ? [repairedConfig] : [])];

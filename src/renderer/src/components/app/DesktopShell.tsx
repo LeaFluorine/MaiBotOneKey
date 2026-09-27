@@ -247,7 +247,8 @@ interface WebviewEntryTarget {
 
 function pluginConfigWebuiPath(pluginId: string): string {
   const params = new URLSearchParams({ plugin: pluginId });
-  return `/plugin-config?${params.toString()}`;
+  const path = pluginId === "maibot-team.snowluma-adapter" ? "/adapter-management" : "/plugin-config";
+  return `${path}?${params.toString()}`;
 }
 
 function createMaibotWebviewTarget(url: string, targetPath: string): WebviewEntryTarget {
@@ -1219,6 +1220,7 @@ export function DesktopShell(): React.JSX.Element {
     userName: window.localStorage.getItem(WEBUI_CHAT_USER_NAME_STORAGE_KEY) ?? undefined,
   }));
   const [maibotWebviewPath, setMaibotWebviewPath] = useState<string | null>(null);
+  const [maibotWebviewNavigationRequest, setMaibotWebviewNavigationRequest] = useState(0);
   const [terminalFocusSessionId, setTerminalFocusSessionId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -1319,7 +1321,7 @@ export function DesktopShell(): React.JSX.Element {
   const maibotWebviewTarget = useMemo(
     () => maibotWebviewPath
       ? createMaibotWebviewTarget(maibotService?.url ?? MAIBOT_DEFAULT_WEBUI_URL, maibotWebviewPath)
-      : { entryUrl: maibotService?.url ?? MAIBOT_DEFAULT_WEBUI_URL },
+      : { entryUrl: maibotService?.url ?? MAIBOT_DEFAULT_WEBUI_URL, targetUrl: undefined },
     [maibotService?.url, maibotWebviewPath],
   );
   const maibotWebviewReloadTrigger =
@@ -1529,6 +1531,7 @@ export function DesktopShell(): React.JSX.Element {
 
   const openPluginConfig = useCallback((pluginId: string) => {
     setMaibotWebviewPath(pluginConfigWebuiPath(pluginId));
+    setMaibotWebviewNavigationRequest((request) => request + 1);
     setActiveTab("maibot");
   }, []);
 
@@ -1918,8 +1921,11 @@ export function DesktopShell(): React.JSX.Element {
                   title="MaiBot WebUI"
                   toolbarPlacement="external"
                   toolbarTarget={webviewToolbarHost}
-                  reloadTrigger={maibotWebviewReloadTrigger}
+                  reloadTrigger={maibotWebviewReloadTrigger
+                    ? `${maibotWebviewReloadTrigger}:${maibotWebviewNavigationRequest}`
+                    : null}
                   url={maibotWebviewTarget.entryUrl}
+                  navigationTargetUrl={maibotWebviewTarget.targetUrl}
                 />
               ) : (
                 <MaiBotWebuiStatusPanel

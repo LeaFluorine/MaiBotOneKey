@@ -102,11 +102,6 @@ import {
 import { useShortcut } from "@/lib/use-shortcut";
 import { useTheme, type ThemePreference } from "@/lib/use-theme";
 import { cn } from "@/lib/utils";
-import {
-  adapterPluginIdForBackend,
-  markAdapterConfigPrompted,
-  shouldPromptAdapterConfig,
-} from "./HomePanel";
 
 interface SettingsStatusPanelProps {
   snapshot: DesktopSnapshot;
@@ -1042,7 +1037,6 @@ function LogLine({ entry }: { entry: LogEntry }): React.JSX.Element {
 export function SettingsStatusPanel({
   snapshot,
   onSnapshot,
-  onOpenPluginConfig,
 }: SettingsStatusPanelProps): React.JSX.Element {
   const theme = useTheme();
   const appearance = useAppearance();
@@ -1272,14 +1266,9 @@ export function SettingsStatusPanel({
     setAdapterResetAction(null);
     try {
       if (qqBackend !== initState.qqBackend) {
-        const shouldOpenAdapterConfig = shouldPromptAdapterConfig(qqBackend);
         await window.maibotDesktop?.init.setQqBackend(qqBackend, {
           resetInvalidAdapterConfigs,
         });
-        if (shouldOpenAdapterConfig) {
-          markAdapterConfigPrompted(qqBackend);
-          window.setTimeout(() => onOpenPluginConfig(adapterPluginIdForBackend(qqBackend)), 250);
-        }
       } else {
         return;
       }
@@ -1289,7 +1278,7 @@ export function SettingsStatusPanel({
     } finally {
       setBusy(null);
     }
-  }, [initState.qqBackend, onOpenPluginConfig, qqBackend, qqBackendSwitchBlocked, refreshSnapshot]);
+  }, [initState.qqBackend, qqBackend, qqBackendSwitchBlocked, refreshSnapshot]);
 
   const upgradeQqComponents = useCallback(async () => {
     if (qqComponentsChangeBlocked) {
@@ -2595,7 +2584,7 @@ export function SettingsStatusPanel({
 
               <TabsContent className="settings-content" value="account">
                 <p className="text-xs text-muted-foreground">
-                  选择当前使用的 QQ 后端。MaiBot Core 运行时会热切换适配器；QQ 后端需先停止。
+                  选择当前使用的 QQ 协议端。请先停止当前协议端；切换时会记住当前端口和 token，并恢复目标协议端上次的连接配置。
                 </p>
                 <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3">
                   <div className="min-w-0 flex-1">

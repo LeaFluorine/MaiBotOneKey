@@ -127,32 +127,11 @@ type MaiBotVersionFetchProgress = {
   tone: "loading" | "success" | "error";
 };
 
-const ADAPTER_CONFIG_PROMPTED_STORAGE_PREFIX = "maibot.adapterConfigPrompted";
 const MESSAGE_PLATFORM_GUIDE_REQUEST_KEY = "maibot.messagePlatformGuide.requested";
 const MAIBOT_OFFICIAL_DOCS_URL = "https://docs.mai-mai.org/";
 const MASCOT_INTRO_TRIGGER_CLICKS = 10;
 
 let mascotIntroShownThisSession = false;
-
-export function adapterPluginIdForBackend(backend: QqBackend): string {
-  return backend === "snowluma" ? "maibot-team.snowluma-adapter" : "maibot-team.napcat-adapter";
-}
-
-export function markAdapterConfigPrompted(backend: QqBackend): void {
-  try {
-    localStorage.setItem(`${ADAPTER_CONFIG_PROMPTED_STORAGE_PREFIX}.${backend}`, "1");
-  } catch {
-    // Local storage may be unavailable in isolated previews.
-  }
-}
-
-export function shouldPromptAdapterConfig(backend: QqBackend): boolean {
-  try {
-    return localStorage.getItem(`${ADAPTER_CONFIG_PROMPTED_STORAGE_PREFIX}.${backend}`) !== "1";
-  } catch {
-    return true;
-  }
-}
 
 function qqWebuiUrl(serviceUrl: string | undefined, backend: QqBackend, portText: string): string {
   const fallback = backend === "snowluma" ? "http://127.0.0.1:5099" : "http://127.0.0.1:6099/webui";
@@ -1164,7 +1143,6 @@ function HomeStatsPanel({
             ) : null}
             <div className="min-w-0">
               <p className={cn(retro ? "retro-title text-xl" : "text-sm font-semibold")}>快捷操作</p>
-              <p className="text-[11px] text-muted-foreground">路径、数据库和配置导入。</p>
             </div>
           </div>
           <Button
@@ -1273,7 +1251,6 @@ function QuickActionsCard({ onOpenQuickActions, retro }: { onOpenQuickActions: (
           ) : null}
           <div className="min-w-0">
             <p className={cn(retro ? "retro-title text-xl" : "text-sm font-semibold")}>快捷操作</p>
-            <p className="text-[11px] text-muted-foreground">路径、数据库和配置导入。</p>
           </div>
         </div>
         <Button
@@ -2305,8 +2282,8 @@ export function HomePanel({
     name: "MaiBot OneKey",
     version: snapshot.appVersion,
   }), [snapshot.appVersion]);
-  const adapterPluginId = adapterPluginIdForBackend(snapshot.initState.qqBackend ?? "napcat");
-  const adapterName = snapshot.initState.qqBackend === "snowluma" ? "SnowLuma 适配器" : "NapCat 适配器";
+  const adapterPluginId = "maibot-team.snowluma-adapter";
+  const adapterName = "QQ 适配器";
   const qqBackend = snapshot.initState.qqBackend ?? "napcat";
   const currentQqWebuiUrl = qqWebuiUrl(napcat?.url, qqBackend, qqWebuiPort);
   const messagePlatformConfigured =
@@ -2846,8 +2823,6 @@ export function HomePanel({
       toast.success(`${messagePlatformBackend === "snowluma" ? "QQ-SnowLuma" : "QQ-NapCat"} 已配置并启动`);
       setMessagePlatformDialogOpen(false);
       await refreshSnapshot();
-      markAdapterConfigPrompted(messagePlatformBackend);
-      window.setTimeout(() => onOpenPluginConfig(adapterPluginIdForBackend(messagePlatformBackend)), 250);
     } catch (nextError) {
       const resetRequest = adapterConfigResetRequestFromError(nextError);
       if (resetRequest) {
@@ -3622,7 +3597,7 @@ export function HomePanel({
       >
         <DialogContent size="md">
           <DialogHeader
-            description="选择要接入的消息软件平台，一键包会写入适配器配置和 WebSocket 服务连接，然后启动对应后端。"
+            description="选择要接入的消息软件平台，一键包会配置并启动对应协议端，QQ 适配器会自动连接。"
             icon={<Server className="size-4" />}
             title="新增消息平台"
             tone="primary"

@@ -28,6 +28,7 @@ import type { PtySessionManager } from "../pty/pty-session-manager";
 import { InitManager } from "./init-manager";
 import { LogStore } from "./log-store";
 import { PythonDependencyManager } from "./python-dependency-manager";
+import { SnowLumaWebuiAuth } from "./snowluma-webui-auth";
 
 interface ServiceDefinition {
   id: ServiceId;
@@ -537,6 +538,7 @@ export class ServiceManager extends EventEmitter {
   private readonly startupSettingsStore: ServiceStartupSettingsStore;
   private readonly externalProcesses = new Map<ServiceId, ChildProcess>();
   private readonly logLineBuffers = new Map<ServiceId, string>();
+  private readonly snowLumaWebuiAuth: SnowLumaWebuiAuth;
 
   constructor(
     private readonly paths: RuntimePaths,
@@ -546,6 +548,7 @@ export class ServiceManager extends EventEmitter {
     private readonly pythonDependencyManager?: PythonDependencyManager,
   ) {
     super();
+    this.snowLumaWebuiAuth = new SnowLumaWebuiAuth(paths.snowlumaRoot, paths.userDataRoot);
     this.commandStore = new ServiceCommandStore(paths);
     this.runtimePathStore = new RuntimePathStore(paths);
     this.terminalSettingsStore = new TerminalSettingsStore(paths);
@@ -719,6 +722,9 @@ export class ServiceManager extends EventEmitter {
       const usePythonEnvironment = definition.id === "maibot" && Boolean(this.pythonDependencyManager);
       const serviceEnv = createServiceSpecificEnv(definition.id, this.startupSettingsStore.get());
       const mergedEnv: Record<string, string> = { ...agreementEnv, ...serviceEnv };
+      if (serviceId === "napcat" && this.initManager.getQqBackendSync() === "snowluma") {
+        Object.assign(mergedEnv, await this.snowLumaWebuiAuth.prepareEnvironment());
+      }
       if (serviceEnv[LOCAL_DASHBOARD_ENV_NAME]) {
         this.logs.append("maibot", "system", `local dashboard enabled: ${LOCAL_DASHBOARD_ENV_NAME}=1`);
       }
@@ -1520,7 +1526,7 @@ export class ServiceManager extends EventEmitter {
   private async resolveServiceUrl(serviceId: ServiceId, fallback: string): Promise<string> {
     if (serviceId === "napcat") {
       if (this.initManager.getQqBackendSync() === "snowluma") {
-        return fallback;
+        return this.snowLumaWebuiAuth.resolveUrl(fallback);
       }
       return this.resolveNapCatUrl(fallback);
     }
@@ -1638,6 +1644,9 @@ export class ServiceManager extends EventEmitter {
 
     for (const line of lines) {
       if (line.length > 0) {
+        if (serviceId === "napcat" && this.initManager.getQqBackendSync() === "snowluma") {
+          this.snowLumaWebuiAuth.captureOutput(line);
+        }
         this.logs.append(serviceId, "stdout", line);
       }
     }

@@ -1168,7 +1168,7 @@ async function fetchMaiBotUpdateInfo(
       target,
       releaseName: `分支 ${targetName}`,
       releaseUrl: `${releaseUrlBase}/tree/${encodeURIComponent(targetName)}`,
-      releaseNotes: /^dev$/iu.test(targetName)
+      releaseNotes: /^(?:main|dev)$/iu.test(targetName)
         ? await fetchMaiBotBranchCommitNotes(targetName)
         : undefined,
       available: true,
@@ -2973,8 +2973,8 @@ export function registerAppIpc({
       const result = await moduleUpdater.updateMaiBot(target, sendProgress);
       if (target) {
         await writeMaiBotUpdateSelection(
-          target.type === "tag" &&
-            target.name === remoteModuleVersionsCache.maibotLatestStableTag
+          (target.type === "branch" && target.name === "main") ||
+          (target.type === "tag" && target.name === remoteModuleVersionsCache.maibotLatestStableTag)
             ? "stable"
             : target.type === "branch" &&
                 /^dev(?:elop(?:ment)?)?$/iu.test(target.name)

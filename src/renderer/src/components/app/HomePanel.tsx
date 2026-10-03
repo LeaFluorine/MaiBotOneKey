@@ -2326,8 +2326,8 @@ export function HomePanel({
   const defaultMaiBotHistoryTag = maibotHistoryTags[0]?.name;
   const selectedMaiBotHistoryTag = selectedMaiBotTag || defaultMaiBotHistoryTag;
   const selectedMaiBotTarget = useMemo<ModuleUpdateTarget | undefined>(() => (
-    maibotChannel === "stable" && snapshot.moduleVersions.maibotLatestStableTag
-      ? { type: "tag", name: snapshot.moduleVersions.maibotLatestStableTag }
+    maibotChannel === "stable"
+      ? { type: "branch", name: "main" }
       : maibotChannel === "other" && maibotOtherTargetMode === "tag" && selectedMaiBotHistoryTag
         ? { type: "tag", name: selectedMaiBotHistoryTag }
         : maibotChannel === "other" && maibotOtherTargetMode === "dev"
@@ -2337,15 +2337,17 @@ export function HomePanel({
     maibotChannel,
     maibotOtherTargetMode,
     selectedMaiBotHistoryTag,
-    snapshot.moduleVersions.maibotLatestStableTag,
   ]);
   const maibotTargetIsCurrent =
     selectedMaiBotTarget?.type === "tag"
+    // 同版本号的分支和 Tag 仍可能包含不同代码，不能据此阻止切换。
+    && snapshot.moduleVersions.maibotSelectedTarget?.type === "tag"
+    && snapshot.moduleVersions.maibotSelectedTarget.name === selectedMaiBotTarget.name
     && Boolean(snapshot.moduleVersions.maibotLocal)
     && compareVersionText(selectedMaiBotTarget.name, versionAsTag(snapshot.moduleVersions.maibotLocal)) === 0;
 
   const maibotTargets: Record<MaiBotUpdateChannel, string | undefined> = {
-    stable: snapshot.moduleVersions.maibotLatestStableTag,
+    stable: "正式版最新内容",
     other: maibotOtherTargetMode === "dev" ? "Dev 最新内容" : selectedMaiBotHistoryTag,
   };
   const maibotDevBranchAvailable = maibotBranches.length === 0 || availableMaiBotBranches.has("dev");
@@ -2626,7 +2628,7 @@ export function HomePanel({
     setMaibotModuleUpdateProgress(null);
     setMaibotModuleUpdateLogs([]);
     setModuleSourceExpanded(false);
-    setMaibotChannel(snapshot.moduleVersions.maibotLatestStableTag ? "stable" : "other");
+    setMaibotChannel("stable");
     setMaibotOtherTargetMode("tag");
     setSelectedMaiBotTag("");
     const storedTarget = snapshot.moduleVersions.maibotSelectedTarget;

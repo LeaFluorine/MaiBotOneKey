@@ -12,6 +12,8 @@ python-overrides
 /python-env/
 /node_modules/
 /out/
+/out-lite/
+/.codex-tmp/
 /release/
 /release-assets/
 /.payload/

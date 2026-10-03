@@ -7,6 +7,8 @@
   "type": "module",
   "main": "out/main/index.cjs",
   "scripts": {
+    "lite:pack": "node scripts/lite/build.ts",
+    "lite:pack:dir": "node scripts/lite/build.ts --dir",
     "dev": "electron-vite dev",
     "dev:reset": "bun run scripts/dev/reset-dev-state.ts",
     "dev:fresh": "bun run dev:reset && bun run dev",

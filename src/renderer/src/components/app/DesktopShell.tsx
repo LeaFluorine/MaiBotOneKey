@@ -5,7 +5,6 @@
   Home,
   Info,
   Loader2,
-  MessageSquare,
   Play,
   Settings,
   Square,
@@ -277,10 +276,6 @@ function createMaibotWebviewTarget(url: string, targetPath: string): WebviewEntr
   } catch {
     return { entryUrl: url, targetUrl: url };
   }
-}
-
-function createMaibotChatWebviewTarget(url: string): WebviewEntryTarget {
-  return createMaibotWebviewTarget(url, MAIBOT_CHAT_WEBUI_PATH);
 }
 
 function selectedCodexPetOption(snapshot: DesktopSnapshot | null): CodexPetOption | null {
@@ -1219,14 +1214,13 @@ export function DesktopShell(): React.JSX.Element {
     userId: window.localStorage.getItem(WEBUI_CHAT_USER_ID_STORAGE_KEY) ?? undefined,
     userName: window.localStorage.getItem(WEBUI_CHAT_USER_NAME_STORAGE_KEY) ?? undefined,
   }));
-  const [maibotWebviewPath, setMaibotWebviewPath] = useState<string | null>(null);
+  const [maibotWebviewPath, setMaibotWebviewPath] = useState<string | null>("/");
   const [maibotWebviewNavigationRequest, setMaibotWebviewNavigationRequest] = useState(0);
   const [terminalFocusSessionId, setTerminalFocusSessionId] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [floatingMode, setFloatingMode] = useState(false);
   const [floatingEdge, setFloatingEdge] = useState<"left" | "right" | null>(null);
-  const [localChatWebviewReloadRequest, setLocalChatWebviewReloadRequest] = useState(0);
   const retroTabsRef = useRef<HTMLDivElement | null>(null);
   const appearance = useAppearance();
   const useRetroChrome = appearance.mode === "future-retro";
@@ -1314,10 +1308,6 @@ export function DesktopShell(): React.JSX.Element {
   // unreachable WebUI is represented by the launcher's shared status page.
   const maibotWebviewAvailable =
     maibotService?.status === "running" && maibotService.health !== "unreachable";
-  const maibotChatWebviewTarget = useMemo(
-    () => createMaibotChatWebviewTarget(maibotService?.url ?? MAIBOT_DEFAULT_WEBUI_URL),
-    [maibotService?.url],
-  );
   const maibotWebviewTarget = useMemo(
     () => maibotWebviewPath
       ? createMaibotWebviewTarget(maibotService?.url ?? MAIBOT_DEFAULT_WEBUI_URL, maibotWebviewPath)
@@ -1328,12 +1318,6 @@ export function DesktopShell(): React.JSX.Element {
     maibotWebviewAvailable
       ? maibotService.url
       : null;
-  const localChatWebviewReloadTrigger = localChatWebviewReloadRequest > 0
-    ? localChatWebviewReloadRequest
-    : maibotWebviewReloadTrigger;
-  const refreshLocalChatWebview = useCallback(() => {
-    setLocalChatWebviewReloadRequest(Date.now());
-  }, []);
   const qqBackendService = serviceById.get("napcat");
   const qqBackendName =
     qqBackendService?.name ?? (snapshot?.initState.qqBackend === "snowluma" ? "SnowLuma" : "NapCat");
@@ -1346,7 +1330,6 @@ export function DesktopShell(): React.JSX.Element {
     () => [
       "home",
       "maibot",
-      "localchat",
       ...(showTerminalTab ? ["terminal"] : []),
       "settings",
     ],
@@ -1460,6 +1443,18 @@ export function DesktopShell(): React.JSX.Element {
   }, []);
 
   const selectTab = useCallback((value: string) => {
+    if (value === "maibot") {
+      setMaibotWebviewPath("/");
+      setMaibotWebviewNavigationRequest((request) => request + 1);
+      setActiveTab("maibot");
+      return;
+    }
+    if (value === "localchat") {
+      setMaibotWebviewPath(MAIBOT_CHAT_WEBUI_PATH);
+      setMaibotWebviewNavigationRequest((request) => request + 1);
+      setActiveTab("maibot");
+      return;
+    }
     if (value === "terminal" && !showTerminalTab) {
       setActiveTab("home");
       return;
@@ -1613,9 +1608,199 @@ export function DesktopShell(): React.JSX.Element {
     };
   }, [useRetroChrome]);
 
-  const webviewToolbarActive =
-    activeTab === "maibot" ||
-    activeTab === "localchat";
+  const webviewToolbarActive = activeTab === "maibot";
+
+  const toolbarActions = (
+    <div
+      className={cn(
+        "flex shrink-0 items-center gap-1",
+        !webviewToolbarActive && "ml-auto",
+        useRetroChrome && "py-1",
+      )}
+    >
+    <Button
+      aria-label="设置"
+      className={cn(
+        useRetroChrome
+          ? [
+              cn("retro-top-action text-primary-foreground [&_svg]:stroke-primary-foreground", retroTopActionIconClassName),
+              activeTab === "settings"
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-[var(--retro-ink)] bg-[var(--retro-ink)] text-primary-foreground hover:bg-[var(--retro-ink)]",
+            ]
+          : "size-7",
+      )}
+      onClick={() => selectTab("settings")}
+      size="icon-sm"
+      variant={useRetroChrome ? "secondary" : activeTab === "settings" ? "default" : "secondary"}
+    >
+      <Settings />
+    </Button>
+    {useRetroChrome ? (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            aria-label={primaryServiceActionLabel}
+            className={cn("retro-top-action w-14 border-primary bg-primary px-0 text-primary-foreground hover:bg-primary/90", retroTopActionIconClassName)}
+            disabled={primaryServiceActionDisabled}
+            onClick={runPrimaryServiceAction}
+            size="sm"
+            variant="secondary"
+          >
+            {primaryServiceActionTransitioning ? (
+              <Loader2 className="animate-spin" />
+            ) : hasActiveServiceProcess ? (
+              <Square />
+            ) : (
+              <Play />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          {primaryServiceActionLabel}
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      <div className="flex shrink-0 items-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              aria-label={primaryServiceActionLabel}
+              className={cn("h-7 w-8 px-0 text-[11px]", !hasActiveServiceProcess && "rounded-r-none")}
+              disabled={primaryServiceActionDisabled}
+              onClick={runPrimaryServiceAction}
+              size="sm"
+              variant="default"
+            >
+              {primaryServiceActionTransitioning ? (
+                <Loader2 className="animate-spin" />
+              ) : hasActiveServiceProcess ? (
+                <Square />
+              ) : (
+                <Play />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {primaryServiceActionLabel}
+          </TooltipContent>
+        </Tooltip>
+        {!hasActiveServiceProcess && !primaryServiceActionTransitioning ? (
+          <DropdownMenuPrimitive.Root>
+            <DropdownMenuPrimitive.Trigger asChild>
+              <Button
+                aria-label="选择要启动的服务"
+                className="-ml-px h-7 w-5 rounded-l-none border-l border-primary-foreground/25 px-0 text-[11px]"
+                disabled={actionBusy !== null}
+                size="sm"
+                variant="default"
+              >
+                <ChevronDown className="size-3" />
+              </Button>
+            </DropdownMenuPrimitive.Trigger>
+            <DropdownMenuPrimitive.Portal>
+              <DropdownMenuPrimitive.Content
+                align="end"
+                className="z-50 min-w-40 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg shadow-black/15"
+                sideOffset={6}
+              >
+                <DropdownMenuPrimitive.Item className={toolbarMenuItemClassName} onSelect={startAll}>
+                  <Play className="size-3.5" />
+                  <span className="flex-1">启动全部服务</span>
+                </DropdownMenuPrimitive.Item>
+                <DropdownMenuPrimitive.Item
+                  className={toolbarMenuItemClassName}
+                  disabled={!maibotService}
+                  onSelect={() => startService("maibot")}
+                >
+                  <Play className="size-3.5" />
+                  启动 MaiBot
+                </DropdownMenuPrimitive.Item>
+                <DropdownMenuPrimitive.Item
+                  className={toolbarMenuItemClassName}
+                  disabled={!qqBackendService || !messagePlatformConfigured}
+                  onSelect={() => startService("napcat")}
+                >
+                  <Play className="size-3.5" />
+                  启动 {qqBackendName}
+                </DropdownMenuPrimitive.Item>
+              </DropdownMenuPrimitive.Content>
+            </DropdownMenuPrimitive.Portal>
+          </DropdownMenuPrimitive.Root>
+        ) : null}
+      </div>
+    )}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          aria-label="打开 MaiBot 根目录"
+          disabled={!snapshot?.paths.maibotRoot}
+          size="icon-sm"
+          variant="ghost"
+          onClick={openMaiBotRoot}
+          className={cn(useRetroChrome ? cn("retro-top-action border-border bg-card", retroTopActionIconClassName) : "size-7")}
+        >
+          <FolderOpen />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        打开 MaiBot 根目录
+      </TooltipContent>
+    </Tooltip>
+  </div>
+  );
+
+  const navigationTabs = (
+    <TabsList
+      className={cn(useRetroChrome ? "retro-tabs retro-folder-tabs h-full" : "h-8 bg-card")}
+      onFocusCapture={handleRetroTabsFocus}
+      onPointerDown={handleRetroTabsPointerDown}
+      onPointerLeave={handleRetroTabsPointerLeave}
+      onPointerOver={handleRetroTabsPointerOver}
+      ref={retroTabsRef}
+    >
+      <TabsTrigger
+        data-retro-active={useRetroChrome && activeTab === "home" ? "true" : undefined}
+        data-retro-tab-item={useRetroChrome ? "true" : undefined}
+        data-retro-tab-value={useRetroChrome ? "home" : undefined}
+        value="home"
+        className={cn("gap-1.5", useRetroChrome && "px-5")}
+      >
+        {!useRetroChrome ? <Home /> : null}
+        首页
+      </TabsTrigger>
+      <TabsTrigger
+        data-retro-active={useRetroChrome && activeTab === "maibot" ? "true" : undefined}
+        data-retro-tab-item={useRetroChrome ? "true" : undefined}
+        data-retro-tab-value={useRetroChrome ? "maibot" : undefined}
+        value="maibot"
+        onClick={() => {
+          if (activeTab === "maibot") {
+            selectTab("maibot");
+          }
+        }}
+        className={cn("gap-1.5", useRetroChrome && "px-5")}
+        style={{
+          color: maibotService?.status === "running" && activeTab !== "maibot" ? "var(--primary)" : undefined,
+        }}
+      >
+        {!useRetroChrome ? <Fish /> : null}
+        MaiBot
+      </TabsTrigger>
+      {showTerminalTab ? (
+        <TabsTrigger
+          data-retro-active={useRetroChrome && activeTab === "terminal" ? "true" : undefined}
+          data-retro-tab-item={useRetroChrome ? "true" : undefined}
+          data-retro-tab-value={useRetroChrome ? "terminal" : undefined}
+          value="terminal"
+          className={cn("gap-1.5", useRetroChrome && "px-5")}
+        >
+          {!useRetroChrome ? <TerminalSquare /> : null}
+          终端
+        </TabsTrigger>
+      ) : null}
+    </TabsList>
+  );
 
   if (floatingMode) {
     return (
@@ -1646,9 +1831,16 @@ export function DesktopShell(): React.JSX.Element {
         )}
       >
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <Tabs
+            value={activeTab}
+            onValueChange={selectTab}
+            className="flex min-h-0 flex-1 flex-col"
+          >
           <Titlebar
             appVersion={snapshot?.appVersion ?? "0.1.0"}
             retro={useRetroChrome}
+            navigation={useRetroChrome ? navigationTabs : undefined}
+            actions={useRetroChrome ? toolbarActions : undefined}
           />
 
           {actionError ? (
@@ -1659,73 +1851,17 @@ export function DesktopShell(): React.JSX.Element {
 
           {/* Main */}
           <main className="flex min-h-0 flex-1 flex-col">
-            <Tabs
-              value={activeTab}
-              onValueChange={selectTab}
-              className="flex min-h-0 flex-1 flex-col"
-            >
               <div
                 className={cn(
                   useRetroChrome
-                    ? "flex h-12 shrink-0 items-stretch gap-0 border-b-3 border-[var(--retro-tabbar-line)] pl-6 pr-5"
+                    ? webviewToolbarActive && maibotWebviewAvailable
+                      ? "flex h-10 shrink-0 items-stretch border-b-3 border-[var(--retro-tabbar-line)] px-4"
+                      : "hidden"
                     : "flex h-10 shrink-0 items-center gap-3 border-b border-border px-3",
                   "bg-card",
                 )}
               >
-                <TabsList
-                  className={cn(useRetroChrome ? "retro-tabs h-full" : "h-8 bg-card")}
-                  onFocusCapture={handleRetroTabsFocus}
-                  onPointerDown={handleRetroTabsPointerDown}
-                  onPointerLeave={handleRetroTabsPointerLeave}
-                  onPointerOver={handleRetroTabsPointerOver}
-                  ref={retroTabsRef}
-                >
-                  <TabsTrigger
-                    data-retro-active={useRetroChrome && activeTab === "home" ? "true" : undefined}
-                    data-retro-tab-item={useRetroChrome ? "true" : undefined}
-                    data-retro-tab-value={useRetroChrome ? "home" : undefined}
-                    value="home"
-                    className={cn("gap-1.5", useRetroChrome && "px-5")}
-                  >
-                    <Home data-retro-fill={useRetroChrome ? "true" : undefined} />
-                    首页
-                  </TabsTrigger>
-                  <TabsTrigger
-                    data-retro-active={useRetroChrome && activeTab === "maibot" ? "true" : undefined}
-                    data-retro-tab-item={useRetroChrome ? "true" : undefined}
-                    data-retro-tab-value={useRetroChrome ? "maibot" : undefined}
-                    value="maibot"
-                    className={cn("gap-1.5", useRetroChrome && "px-5")}
-                    style={{
-                      color: maibotService?.status === "running" && activeTab !== "maibot" ? "var(--primary)" : undefined,
-                    }}
-                  >
-                    <Fish />
-                    MaiBot
-                  </TabsTrigger>
-                  <TabsTrigger
-                    data-retro-active={useRetroChrome && activeTab === "localchat" ? "true" : undefined}
-                    data-retro-tab-item={useRetroChrome ? "true" : undefined}
-                    data-retro-tab-value={useRetroChrome ? "localchat" : undefined}
-                    value="localchat"
-                    className={cn("gap-1.5", useRetroChrome && "px-5")}
-                  >
-                    <MessageSquare />
-                    聊聊
-                  </TabsTrigger>
-                  {showTerminalTab ? (
-                    <TabsTrigger
-                      data-retro-active={useRetroChrome && activeTab === "terminal" ? "true" : undefined}
-                      data-retro-tab-item={useRetroChrome ? "true" : undefined}
-                      data-retro-tab-value={useRetroChrome ? "terminal" : undefined}
-                      value="terminal"
-                      className={cn("gap-1.5", useRetroChrome && "px-5")}
-                    >
-                      <TerminalSquare />
-                      终端
-                    </TabsTrigger>
-                  ) : null}
-                </TabsList>
+                {!useRetroChrome ? navigationTabs : null}
                 <div
                   className={cn(
                     webviewToolbarActive
@@ -1735,143 +1871,8 @@ export function DesktopShell(): React.JSX.Element {
                   )}
                   ref={setWebviewToolbarHost}
                 />
-                <div
-                  className={cn(
-                    "flex shrink-0 items-center gap-1",
-                    !webviewToolbarActive && "ml-auto",
-                    useRetroChrome && "py-1",
-                  )}
-                >
-                <Button
-                  aria-label="设置"
-                  className={cn(
-                    useRetroChrome
-                      ? [
-                          cn("retro-top-action text-primary-foreground [&_svg]:stroke-primary-foreground", retroTopActionIconClassName),
-                          activeTab === "settings"
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-[var(--retro-ink)] bg-[var(--retro-ink)] text-primary-foreground hover:bg-[var(--retro-ink)]",
-                        ]
-                      : "size-7",
-                  )}
-                  onClick={() => selectTab("settings")}
-                  size="icon-sm"
-                  variant={useRetroChrome ? "secondary" : activeTab === "settings" ? "default" : "secondary"}
-                >
-                  <Settings />
-                </Button>
-                {useRetroChrome ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        aria-label={primaryServiceActionLabel}
-                        className={cn("retro-top-action w-14 border-primary bg-primary px-0 text-primary-foreground hover:bg-primary/90", retroTopActionIconClassName)}
-                        disabled={primaryServiceActionDisabled}
-                        onClick={runPrimaryServiceAction}
-                        size="sm"
-                        variant="secondary"
-                      >
-                        {primaryServiceActionTransitioning ? (
-                          <Loader2 className="animate-spin" />
-                        ) : hasActiveServiceProcess ? (
-                          <Square />
-                        ) : (
-                          <Play />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {primaryServiceActionLabel}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <div className="flex shrink-0 items-center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          aria-label={primaryServiceActionLabel}
-                          className={cn("h-7 w-8 px-0 text-[11px]", !hasActiveServiceProcess && "rounded-r-none")}
-                          disabled={primaryServiceActionDisabled}
-                          onClick={runPrimaryServiceAction}
-                          size="sm"
-                          variant="default"
-                        >
-                          {primaryServiceActionTransitioning ? (
-                            <Loader2 className="animate-spin" />
-                          ) : hasActiveServiceProcess ? (
-                            <Square />
-                          ) : (
-                            <Play />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {primaryServiceActionLabel}
-                      </TooltipContent>
-                    </Tooltip>
-                    {!hasActiveServiceProcess && !primaryServiceActionTransitioning ? (
-                      <DropdownMenuPrimitive.Root>
-                        <DropdownMenuPrimitive.Trigger asChild>
-                          <Button
-                            aria-label="选择要启动的服务"
-                            className="-ml-px h-7 w-5 rounded-l-none border-l border-primary-foreground/25 px-0 text-[11px]"
-                            disabled={actionBusy !== null}
-                            size="sm"
-                            variant="default"
-                          >
-                            <ChevronDown className="size-3" />
-                          </Button>
-                        </DropdownMenuPrimitive.Trigger>
-                        <DropdownMenuPrimitive.Portal>
-                          <DropdownMenuPrimitive.Content
-                            align="end"
-                            className="z-50 min-w-40 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg shadow-black/15"
-                            sideOffset={6}
-                          >
-                            <DropdownMenuPrimitive.Item className={toolbarMenuItemClassName} onSelect={startAll}>
-                              <Play className="size-3.5" />
-                              <span className="flex-1">启动全部服务</span>
-                            </DropdownMenuPrimitive.Item>
-                            <DropdownMenuPrimitive.Item
-                              className={toolbarMenuItemClassName}
-                              disabled={!maibotService}
-                              onSelect={() => startService("maibot")}
-                            >
-                              <Play className="size-3.5" />
-                              启动 MaiBot
-                            </DropdownMenuPrimitive.Item>
-                            <DropdownMenuPrimitive.Item
-                              className={toolbarMenuItemClassName}
-                              disabled={!qqBackendService || !messagePlatformConfigured}
-                              onSelect={() => startService("napcat")}
-                            >
-                              <Play className="size-3.5" />
-                              启动 {qqBackendName}
-                            </DropdownMenuPrimitive.Item>
-                          </DropdownMenuPrimitive.Content>
-                        </DropdownMenuPrimitive.Portal>
-                      </DropdownMenuPrimitive.Root>
-                    ) : null}
-                  </div>
-                )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      aria-label="打开 MaiBot 根目录"
-                      disabled={!snapshot?.paths.maibotRoot}
-                      size="icon-sm"
-                      variant="ghost"
-                      onClick={openMaiBotRoot}
-                      className={cn(useRetroChrome ? cn("retro-top-action border-border bg-card", retroTopActionIconClassName) : "size-7")}
-                    >
-                      <FolderOpen />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    打开 MaiBot 根目录
-                  </TooltipContent>
-                </Tooltip>
-              </div>
+                {!useRetroChrome ? toolbarActions : null}
+
             </div>
 
             <div className="relative min-h-0 flex-1 overflow-hidden">
@@ -1937,34 +1938,6 @@ export function DesktopShell(): React.JSX.Element {
               )}
             </TabsContent>
 
-            <TabsContent
-              forceMount
-              inert={activeTab !== "localchat"}
-              value="localchat"
-              className={tabPageTransitionClassName}
-              style={tabPageTransitionStyle("localchat", activeTab, tabPageOrder)}
-            >
-              {maibotWebviewAvailable ? (
-                <WebviewPanel
-                  active={activeTab === "localchat"}
-                  onWebuiIdentity={rememberWebuiIdentity}
-                  title="MaiBot WebUI 聊聊"
-                  toolbarPlacement="external"
-                  toolbarTarget={webviewToolbarHost}
-                  navigationTargetUrl={maibotChatWebviewTarget.targetUrl}
-                  reloadTrigger={localChatWebviewReloadTrigger}
-                  url={maibotChatWebviewTarget.entryUrl}
-                />
-              ) : (
-                <MaiBotWebuiStatusPanel
-                  busy={actionBusy?.startsWith("maibot:") ?? false}
-                  onStart={startService}
-                  retro={useRetroChrome}
-                  service={maibotService}
-                />
-              )}
-            </TabsContent>
-
             {showTerminalTab ? (
               <TabsContent
                 forceMount
@@ -2008,16 +1981,15 @@ export function DesktopShell(): React.JSX.Element {
               )}
             </TabsContent>
             </div>
-          </Tabs>
         </main>
+          </Tabs>
 
         {snapshot ? (
           <StartupAgreementDialog onSnapshot={setSnapshot} snapshot={snapshot} />
         ) : null}
         {snapshot ? (
           <InitializationWizard
-            onOpenTab={setActiveTab}
-            onRefreshLocalChat={refreshLocalChatWebview}
+            onOpenTab={selectTab}
             onSnapshot={setSnapshot}
             snapshot={snapshot}
           />

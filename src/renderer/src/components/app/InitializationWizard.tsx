@@ -37,7 +37,6 @@ interface InitializationWizardProps {
   snapshot: DesktopSnapshot;
   onSnapshot: (snapshot: DesktopSnapshot) => void;
   onOpenTab: (tab: string) => void;
-  onRefreshLocalChat: () => void;
 }
 
 const STARTUP_WIZARD_KEY = "maibot-startup-wizard-seen";
@@ -162,7 +161,6 @@ export function InitializationWizard({
   snapshot,
   onSnapshot,
   onOpenTab,
-  onRefreshLocalChat,
 }: InitializationWizardProps): React.JSX.Element | null {
   const [seen, setSeen] = useState(readStartupWizardSeen);
   const [busy, setBusy] = useState(false);
@@ -445,14 +443,13 @@ export function InitializationWizard({
     try {
       await waitForMaiBotWebUi();
       onOpenTab("localchat");
-      onRefreshLocalChat();
       setStep("localchat");
     } catch (nextError) {
       setError(messageFromError(nextError));
     } finally {
       setBusy(false);
     }
-  }, [onOpenTab, onRefreshLocalChat, waitForMaiBotWebUi]);
+  }, [onOpenTab, waitForMaiBotWebUi]);
 
   const finishLocalChatGuide = useCallback(() => {
     onOpenTab("home");
@@ -475,7 +472,7 @@ export function InitializationWizard({
       step === "webui"
         ? "请在 WebUI 中完成基础配置，保存后点这里继续。"
         : step === "localchat"
-          ? "已切到“聊聊”。这里可以直接和本机运行中的 MaiBot 对话，用来测试角色、回复风格和插件效果。"
+          ? "已在 MaiBot 页面打开聊天。这里可以直接和本机运行中的 MaiBot 对话，用来测试角色、回复风格和插件效果。"
           : "接下来会回到首页并打开 Message Platform 配置。配置 QQ 号和后端后，MaiBot 就可以通过 QQ 等即时通讯平台收发消息。";
     const floatingAction =
       step === "webui" ? "已完成" : step === "localchat" ? "下一步" : "打开配置";

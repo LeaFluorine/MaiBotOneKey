@@ -4,7 +4,7 @@ import {
   Square,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { WindowState } from "@shared/contracts";
 import { cn } from "@/lib/utils";
 import { usePlatform } from "@/lib/platform";
@@ -14,6 +14,8 @@ import { useTheme, type ThemePreference } from "@/lib/use-theme";
 interface TitlebarProps {
   appVersion: string;
   retro?: boolean;
+  navigation?: ReactNode;
+  actions?: ReactNode;
 }
 
 function useWindowState(): WindowState {
@@ -148,6 +150,8 @@ function nextTitlebarTheme(current: ThemePreference): ThemePreference {
 export function Titlebar({
   appVersion,
   retro = false,
+  navigation,
+  actions,
 }: TitlebarProps): React.JSX.Element {
   const platform = usePlatform();
   const state = useWindowState();
@@ -225,7 +229,8 @@ export function Titlebar({
 
       <div
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-1.5",
+          "flex min-w-0 items-center gap-1.5",
+          navigation ? "shrink-0 pr-5" : "flex-1",
           isMac ? "justify-center px-3" : "px-1",
         )}
       >
@@ -234,7 +239,19 @@ export function Titlebar({
         </span>
       </div>
 
+      {navigation ? (
+        <div className="ml-6 min-w-0 self-end pt-1" data-app-region="no-drag">
+          {navigation}
+        </div>
+      ) : null}
+      {navigation ? <div className="min-w-4 flex-1" /> : null}
+
       {/* Right cluster */}
+      {actions ? (
+        <div className="retro-titlebar-actions flex shrink-0 items-center px-2" data-app-region="no-drag">
+          {actions}
+        </div>
+      ) : null}
       <div className="flex items-center gap-1.5 px-1.5" data-app-region="no-drag">
         <span className="retro-value hidden text-[11px] text-foreground md:inline-block">
           v{appVersion}

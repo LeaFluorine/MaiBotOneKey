@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import process from "node:process";
 
@@ -52,7 +52,47 @@ async function main(): Promise<void> {
     throw new Error("Cannot build the standard installer because runtime/python is missing.");
   }
 
-  await buildWindowsInstaller();
+  if (!process.argv.includes("--snowluma-only")) {
+    await buildWindowsInstaller();
+  }
+  await buildSnowLumaInstaller();
+}
+
+async function buildSnowLumaInstaller(): Promise<void> {
+  console.log("[release] Building Windows x64 SnowLuma installer without NapCat");
+  const { build, version } = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+  const output = join(root, "release", "snowluma");
+  const configPath = join(root, ".codex-tmp", "electron-builder-snowluma.json");
+  await mkdir(join(root, ".codex-tmp"), { recursive: true });
+  // Use a separate output directory so builder caches and update metadata cannot
+  // overwrite those of the full installer. The shared modules filter excludes NapCat.
+  await writeFile(configPath, JSON.stringify({
+    ...build,
+    directories: { ...build.directories, output },
+    win: {
+      ...build.win,
+      artifactName: "MaiBot-OK-${version}-win-snowluma.${ext}",
+      extraResources: [],
+    },
+  }, null, 2));
+  try {
+    await run(process.execPath, [
+      join(root, "node_modules", "electron-builder", "cli.js"),
+      "--win", "nsis", "--x64", "--publish", "never", "--config", configPath,
+    ]);
+    if (existsSync(join(output, "win-unpacked", "resources", "modules", "napcat"))) {
+      throw new Error("SnowLuma installer unexpectedly includes NapCat.");
+    }
+    for (const name of await readdir(output)) {
+      if (name === `MaiBot-OK-${version}-win-snowluma.exe`
+        || name === `MaiBot-OK-${version}-win-snowluma.exe.blockmap`) {
+        await copyFile(join(output, name), join(root, "release", name));
+      }
+    }
+    await copyFile(join(output, "latest.yml"), join(root, "release", "latest-win-snowluma.yml"));
+  } finally {
+    await rm(configPath, { force: true });
+  }
 }
 
 async function buildWindowsInstaller(): Promise<void> {

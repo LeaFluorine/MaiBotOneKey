@@ -49,7 +49,7 @@ bun run build
 
 ## Windows 打包
 
-Windows x64 NSIS 安装包当前产出正式版：`MaiBot OK-<version>-win.exe`。正式版会打包干净的基础 Python、内置 Git、MaiBot、NapCat、SnowLuma 以及 NapCat/SnowLuma 适配器插件，但不会把 MaiBot Python 依赖预装进包内 runtime；首次启动时启动器会复制一份可写 `python-env` 并把运行依赖安装到其中。
+Windows x64 NSIS 打包一次产出两个安装包：完整版 `MaiBot-OK-<version>-win.exe`，以及不含 NapCat 的 SnowLuma 版 `MaiBot-OK-<version>-win-snowluma.exe`。两版都包含干净的基础 Python、内置 Git、MaiBot、SnowLuma 与共享适配器插件；完整版额外包含 NapCat，SnowLuma 版首次使用默认选择 SnowLuma。MaiBot Python 依赖不会预装进包内 runtime；首次启动时启动器会复制一份可写 `python-env` 并把运行依赖安装到其中。
 
 打包前需要在仓库根目录放好 payload：
 
@@ -93,12 +93,17 @@ bun run scripts/release/build-windows-variants.ts
 bun run release:win
 ```
 
+只构建不含 NapCat 的 SnowLuma 版：`bun run release:win:snowluma`。
+
 产物输出到 `release/`：
 
 ```text
-release/MaiBot OK-<version>-win.exe
-release/MaiBot OK-<version>-win.exe.blockmap
+release/MaiBot-OK-<version>-win.exe
+release/MaiBot-OK-<version>-win.exe.blockmap
+release/MaiBot-OK-<version>-win-snowluma.exe
+release/MaiBot-OK-<version>-win-snowluma.exe.blockmap
 release/latest-win.yml
+release/latest-win-snowluma.yml
 ```
 
 ## CI

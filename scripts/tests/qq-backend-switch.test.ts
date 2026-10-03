@@ -20,6 +20,7 @@ async function fixture() {
     napcatRoot: join(root, "napcat"),
     snowlumaRoot: join(root, "SnowLuma"),
     userDataRoot: join(root, "userData"),
+    bundledModulesRoot: join(root, "bundled"),
   } as RuntimePaths;
   const adapterPath = join(paths.maibotRoot, "plugins", "snowluma-adapter", "config.toml");
   await mkdir(join(paths.maibotRoot, "plugins", "snowluma-adapter"), { recursive: true });
@@ -30,6 +31,21 @@ async function fixture() {
   manager.getState = async () => ({ qqBackend: manager.getQqBackendSync() } as InitState);
   return { paths, manager, adapterPath };
 }
+
+test("SnowLuma-only payload defaults to SnowLuma and preserves a saved backend", async () => {
+  const { paths, manager } = await fixture();
+  await mkdir(join(paths.bundledModulesRoot, "SnowLuma"), { recursive: true });
+  expect(manager.getQqBackendSync()).toBe("snowluma");
+  await manager.setQqBackend("napcat");
+  expect(manager.getQqBackendSync()).toBe("napcat");
+});
+
+test("full payload keeps NapCat as the default", async () => {
+  const { paths, manager } = await fixture();
+  await mkdir(join(paths.bundledModulesRoot, "SnowLuma"), { recursive: true });
+  await mkdir(join(paths.bundledModulesRoot, "napcat"), { recursive: true });
+  expect(manager.getQqBackendSync()).toBe("napcat");
+});
 
 async function endpoint(paths: RuntimePaths, backend: QqBackend) {
   if (backend === "napcat") {

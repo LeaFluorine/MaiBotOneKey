@@ -1344,7 +1344,10 @@ export class InitManager {
       const parsed = JSON.parse(readFileSync(this.qqBackendPath(), "utf8")) as { backend?: unknown };
       return parsed.backend === "snowluma" ? "snowluma" : "napcat";
     } catch {
-      return "napcat";
+      return this.paths.bundledModulesRoot
+        && !existsSync(join(this.paths.bundledModulesRoot, "napcat"))
+        && existsSync(join(this.paths.bundledModulesRoot, "SnowLuma"))
+        ? "snowluma" : "napcat";
     }
   }
 
@@ -2377,14 +2380,16 @@ export class InitManager {
     await this.cleanupQqComponentProcesses();
 
     const components: QqComponentUpgradeEntry[] = [];
-    components.push(
-      await this.upgradeBundledComponent({
-        id: "napcat",
-        name: "NapCat",
-        moduleName: "napcat",
-        isProtectedPath: isNapcatComponentProtectedPath,
-      }),
-    );
+    if (existsSync(join(this.paths.bundledModulesRoot, "napcat"))) {
+      components.push(
+        await this.upgradeBundledComponent({
+          id: "napcat",
+          name: "NapCat",
+          moduleName: "napcat",
+          isProtectedPath: isNapcatComponentProtectedPath,
+        }),
+      );
+    }
     components.push(
       await this.upgradeBundledComponent({
         id: "snowluma",

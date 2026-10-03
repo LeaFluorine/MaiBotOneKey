@@ -72,6 +72,7 @@ import {
   DialogContent,
   DialogFooter,
   DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
@@ -3573,13 +3574,8 @@ export function HomePanel({
       </Dialog>
 
       <Dialog open={quickActionsOpen} onOpenChange={setQuickActionsOpen}>
-        <DialogContent size="lg">
-          <DialogHeader
-            description="选择路径、导入旧数据库或覆盖 MaiBot 配置文件。"
-            icon={<Wrench className="size-4" />}
-            title="快捷操作"
-            tone="primary"
-          />
+        <DialogContent aria-describedby={undefined} className="grid-rows-[minmax(0,1fr)_auto]" size="lg">
+          <DialogTitle className="sr-only">快捷操作</DialogTitle>
           <DialogBody>
             <QuickActionsPanel embedded />
           </DialogBody>

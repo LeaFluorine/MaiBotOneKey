@@ -17,7 +17,7 @@ async function buildVariant(variant: "standard" | "full" | "snowluma"): Promise<
   const pythonRoot = join(root, "runtime", variant === "full" ? "python-full" : "python");
   if (!existsSync(join(pythonRoot, "python.exe"))) throw new Error("Missing Python runtime: " + pythonRoot);
   if (variant === "full") {
-    await run(join(pythonRoot, "python.exe"), [join(root, "scripts/release/prepare-full-python.py"), "--verify"]);
+    await run(join(pythonRoot, "python.exe"), ["-I", join(root, "scripts/release/prepare-full-python.py"), "--verify"]);
   }
   const output = join(root, "release", variant);
   const configPath = join(root, ".codex-tmp", "electron-builder-" + variant + ".json");

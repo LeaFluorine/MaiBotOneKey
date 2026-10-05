@@ -20,6 +20,7 @@ import {
   Save,
   Settings,
   ShieldCheck,
+  Smartphone,
   TerminalSquare,
   Trash2,
   UserRound,
@@ -1058,6 +1059,33 @@ export function SettingsStatusPanel({
     snowluma: readQqWebuiPort("snowluma"),
   }));
   const [busy, setBusy] = useState<string | null>(null);
+  const [miniMode, setMiniMode] = useState(false);
+  useEffect(() => {
+    const bridge = window.maibotDesktop?.window;
+    if (!bridge) return;
+    let mounted = true;
+    const sync = (state: { isMiniMode?: boolean }) => {
+      if (mounted && typeof state.isMiniMode === "boolean") setMiniMode(state.isMiniMode);
+    };
+    void bridge.getState().then(sync).catch(() => undefined);
+    const off = bridge.onState(sync);
+    return () => { mounted = false; off(); };
+  }, []);
+
+  const toggleMiniMode = async () => {
+    const bridge = window.maibotDesktop?.window;
+    if (!bridge) return;
+    setBusy("mini-mode");
+    setError(null);
+    try {
+      const state = await bridge.setMiniMode(!miniMode);
+      setMiniMode(state.isMiniMode === true);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(null);
+    }
+  };
   const [error, setError] = useState<string | null>(null);
   const [activeSettingsTab, setActiveSettingsTab] = useState("general");
   const [developerModeEnabled, setDeveloperModeEnabled] = useState(
@@ -2803,6 +2831,19 @@ export function SettingsStatusPanel({
 
               {developerModeEnabled ? (
               <TabsContent className="settings-content" value="debug">
+                <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <Smartphone className="size-4 shrink-0 text-primary" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">迷你模式</p>
+                      <p className="text-xs text-muted-foreground">切换为手机比例的竖屏窗口（约 420 × 840），退出时恢复原窗口。</p>
+                    </div>
+                  </div>
+                  <Button aria-pressed={miniMode} disabled={busy !== null || !window.maibotDesktop} onClick={() => void toggleMiniMode()} size="sm" variant={miniMode ? "default" : "secondary"}>
+                    {busy === "mini-mode" ? <Loader2 className="animate-spin" /> : <Smartphone />}
+                    {miniMode ? "退出迷你模式" : "进入迷你模式"}
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground">
                   调试配置用于本地开发和排查更新链路；修改后会影响之后启动的服务或 Git 操作。
                 </p>

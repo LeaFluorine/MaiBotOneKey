@@ -645,6 +645,19 @@
   padding-block: 6px;
 }
 
+/* 紧凑工具栏的键帽仍需给中文行框与上下高光留出空间。 */
+:root[data-appearance-mode="millennium"] .terminal-toolbar [data-slot="button"] {
+  height: 32px;
+  padding-block: 4px;
+  align-items: center;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+:root[data-appearance-mode="millennium"] .terminal-toolbar [data-slot="button"] > svg {
+  translate: none;
+}
+
 /* 会话是一张张卡片，选中的那张顶边有薄荷绿 */
 :root[data-appearance-mode="millennium"] .terminal-session-tab {
   background-color: var(--mil-panel);

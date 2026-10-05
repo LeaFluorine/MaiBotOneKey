@@ -21,6 +21,7 @@ export function QqWebuiDialog({ open, onOpenChange, backend, url }: QqWebuiDialo
         <DialogBody className="overflow-hidden p-0">
           <WebviewPanel
             active={open}
+            showZoomControls={backend === "snowluma"}
             title={title}
             url={url}
             toolbarActions={(
@@ -33,12 +34,12 @@ export function QqWebuiDialog({ open, onOpenChange, backend, url }: QqWebuiDialo
           />
         </DialogBody>
         {backend === "snowluma" ? (
-          <section className="max-h-[35vh] overflow-auto border-t border-border bg-muted/40 px-6 py-5">
-            <h2 className="text-xl font-semibold">在SnowLuma中连接上对应QQ</h2>
-            <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
-              <li>使用QQ登录需要连接麦麦的账号</li>
+          <section className="max-h-[25vh] overflow-auto border-t border-border bg-muted/40 px-4 py-2">
+            <h2 className="text-sm font-semibold leading-5">在 SnowLuma 中连接 QQ</h2>
+            <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-xs leading-5">
+              <li>登录需要连接麦麦的 QQ 账号</li>
               <li>
-                进入SnowLuma 的 WebUI 的 <strong className="text-primary">进程注入</strong> 页面，选择对应的QQ并点击 <strong className="text-primary">加载</strong>
+                进入 <strong className="text-primary">进程注入</strong> 页面，选择对应 QQ 并点击 <strong className="text-primary">加载</strong>
               </li>
             </ol>
           </section>

@@ -1445,6 +1445,77 @@ samp {
   gap: 1rem;
 }
 
+/* Phone-sized windows keep navigation and actions on their own rows. */
+@media (max-width: 600px) {
+  .app-titlebar {
+    display: grid;
+    height: auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .app-titlebar-brand {
+    grid-column: 1;
+    grid-row: 1;
+    padding-left: 12px;
+  }
+
+  .app-titlebar-core {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 36px;
+    overflow: hidden;
+    padding-right: 4px;
+  }
+
+  .app-window-controls {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .app-titlebar .retro-titlebar-actions {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-height: 32px;
+    justify-content: flex-end;
+    overflow-x: auto;
+  }
+
+  .app-titlebar-navigation {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-inline: 0;
+    overflow-x: auto;
+  }
+
+  .app-titlebar-navigation [role="tablist"] {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .app-titlebar-navigation [role="tab"] {
+    flex: 1;
+    min-width: 0;
+    padding-inline: 12px;
+    font-size: 12px;
+  }
+
+  .app-titlebar-toolbar {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    min-height: 32px;
+    overflow-x: auto;
+  }
+
+  .app-titlebar-toolbar:has(> div > .hidden) {
+    display: none;
+  }
+
+  .settings-scroll-scope > section {
+    padding-inline: 12px;
+  }
+}
+
 .settings-content > * + * {
   margin-top: 0 !important;
 }

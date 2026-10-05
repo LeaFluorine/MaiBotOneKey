@@ -137,6 +137,8 @@ const desktopBridge: DesktopBridge = {
   onSnapshot: (callback: (snapshot: DesktopSnapshot) => void) =>
     onIpc("desktop:snapshot", callback),
   window: {
+    setMiniMode: (enabled: boolean) =>
+      ipcRenderer.invoke("desktop:window:setMiniMode", enabled) as Promise<WindowState>,
     minimize: () => ipcRenderer.invoke("desktop:window:minimize") as Promise<void>,
     toggleMaximize: () => ipcRenderer.invoke("desktop:window:toggleMaximize") as Promise<WindowState>,
     close: () => ipcRenderer.invoke("desktop:window:close") as Promise<void>,

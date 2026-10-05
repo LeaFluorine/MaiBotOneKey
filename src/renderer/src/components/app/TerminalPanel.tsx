@@ -3,7 +3,7 @@ import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/xterm";
 import type { IBufferLine, ILink, ILinkProvider } from "@xterm/xterm";
 import type { LogEntry, PtySessionSnapshot, ServiceDescriptor, ServiceId, TerminalSettings } from "@shared/contracts";
-import { ArrowDownToLine, Copy, Loader2, Plus, RotateCcw, X } from "lucide-react";
+import { ArrowDownToLine, Copy, Loader2, Play, Plus, RotateCcw, Square, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import { Badge } from "@/components/ui/badge";
@@ -220,6 +220,9 @@ export function TerminalPanel({
   services = [],
   terminalSettings,
   maibotRoot,
+  onStartService,
+  onStopService,
+  serviceActionBusy,
 }: {
   active?: boolean;
   recentLogs?: LogEntry[];
@@ -228,11 +231,15 @@ export function TerminalPanel({
   services?: ServiceDescriptor[];
   terminalSettings?: TerminalSettings;
   maibotRoot?: string;
+  onStartService: (id: ServiceId) => void;
+  onStopService: (id: ServiceId) => void;
+  serviceActionBusy?: string | null;
 }): React.JSX.Element {
   const [activeSessionId, setActiveSessionId] = useState(serviceTerminals[0].sessionId);
   const [userTerminals, setUserTerminals] = useState<UserTerminal[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCreatingTerminal, setIsCreatingTerminal] = useState(false);
+  const [terminalActionSessionId, setTerminalActionSessionId] = useState<string | null>(null);
   const [sessionVersion, setSessionVersion] = useState(0);
   const sessionsRef = useRef(new Map<string, PtySessionSnapshot>());
   const terminalsRef = useRef(new Map<string, TerminalInstance>());
@@ -270,6 +277,14 @@ export function TerminalPanel({
     ? `${activeSession.cwd}${activeCommandText ? ` · ${activeCommandText}` : ""}`
     : (activeCommandText ?? "启动命令会在服务启动后显示");
   const canCreateUserTerminal = Boolean(window.maibotDesktop?.pty && maibotRoot);
+  const activeProcessStatus = activeTerminal.kind === "service" ? activeService?.status : activeSession?.status;
+  const activeProcessRunning = activeProcessStatus === "running";
+  const activeProcessTransitioning = activeProcessStatus === "starting" || activeProcessStatus === "stopping";
+  const terminalActionBusy = terminalActionSessionId === activeTerminal.sessionId || activeProcessTransitioning ||
+    (activeTerminal.kind === "service" && Boolean(serviceActionBusy));
+  const canControlActiveTerminal = activeTerminal.kind === "service"
+    ? Boolean(window.maibotDesktop && activeService)
+    : Boolean(window.maibotDesktop?.pty && (activeSession?.cwd || maibotRoot));
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
@@ -837,6 +852,43 @@ export function TerminalPanel({
     setActiveSessionId(sessionId);
   }, []);
 
+  const toggleActiveTerminal = async (): Promise<void> => {
+    if (terminalActionBusy || !canControlActiveTerminal) return;
+    const { sessionId, serviceId, title } = activeTerminal;
+    if (serviceId) {
+      if (activeProcessRunning) onStopService(serviceId);
+      else onStartService(serviceId);
+      return;
+    }
+
+    const bridge = window.maibotDesktop;
+    if (!bridge?.pty) return;
+    setTerminalActionSessionId(sessionId);
+    try {
+      if (activeProcessRunning) {
+        await bridge.pty.stop({ sessionId });
+      } else {
+        const snapshot = await bridge.pty.start({
+          id: sessionId,
+          title,
+          cwd: activeSession?.cwd || maibotRoot,
+          command: activeSession?.command,
+          cols: activeSession?.cols,
+          rows: activeSession?.rows,
+          encoding: activeSession?.encoding ?? "auto",
+        });
+        sessionsRef.current.set(snapshot.id, snapshot);
+        notifySessionsChanged();
+        scheduleFitTerminal(sessionId);
+      }
+    } catch (error) {
+      writeSystemLine(getTerminal(sessionId).terminal,
+        `${activeProcessRunning ? "中止" : "启动"}失败: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setTerminalActionSessionId(null);
+    }
+  };
+
   const terminalTabs = (
     <>
       {terminalEntries.map((item) => {
@@ -906,6 +958,17 @@ export function TerminalPanel({
           {terminalTabs}
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            className="h-7 px-2 text-xs"
+            disabled={!canControlActiveTerminal || terminalActionBusy}
+            onClick={toggleActiveTerminal}
+            size="sm"
+            title={`${activeProcessRunning ? "中止" : "启动"} ${activeService?.name ?? activeTerminal.title}`}
+            variant={activeProcessRunning ? "destructive" : "outline"}
+          >
+            {terminalActionBusy ? <Loader2 className="animate-spin" /> : activeProcessRunning ? <Square /> : <Play />}
+            {activeProcessStatus === "starting" ? "启动中" : activeProcessStatus === "stopping" ? "中止中" : activeProcessRunning ? "中止" : "启动"}
+          </Button>
           <Button
             className="h-7 px-2 text-xs"
             disabled={!canCreateUserTerminal || isCreatingTerminal}

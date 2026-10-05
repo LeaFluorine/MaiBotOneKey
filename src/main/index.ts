@@ -380,6 +380,18 @@ function createMainWindow(): BrowserWindow {
     return { action: "deny" };
   });
 
+  window.webContents.on("did-attach-webview", (_event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+      // WebUI documentation and other new-tab links use the default browser.
+      if (/^https?:\/\//i.test(url)) {
+        void shell.openExternal(url).catch((error) => {
+          console.error("Failed to open WebUI link in the default browser", error);
+        });
+      }
+      return { action: "deny" };
+    });
+  });
+
   if (process.env.ELECTRON_RENDERER_URL) {
     window.loadURL(process.env.ELECTRON_RENDERER_URL).catch(() => undefined);
   } else {

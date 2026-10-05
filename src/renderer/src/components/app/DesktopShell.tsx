@@ -1277,20 +1277,16 @@ export function DesktopShell(): React.JSX.Element {
     () => (snapshot?.recentLogs ?? []).filter(isDependencyPreparationLog).slice(-12),
     [snapshot?.recentLogs],
   );
-  // Keep webviews mounted while health is being checked. A confirmed
-  // unreachable WebUI is represented by the launcher's shared status page.
+  // Process startup precedes HTTP readiness. Keep the status page until the
+  // service is reachable; WebviewPanel then waits for the frontend to render.
   const maibotWebviewAvailable =
-    maibotService?.status === "running" && maibotService.health !== "unreachable";
+    maibotService?.status === "running" && maibotService.health === "ready";
   const maibotWebviewTarget = useMemo(
     () => maibotWebviewPath
       ? createMaibotWebviewTarget(maibotService?.url ?? MAIBOT_DEFAULT_WEBUI_URL, maibotWebviewPath)
       : { entryUrl: maibotService?.url ?? MAIBOT_DEFAULT_WEBUI_URL, targetUrl: undefined },
     [maibotService?.url, maibotWebviewPath],
   );
-  const maibotWebviewReloadTrigger =
-    maibotWebviewAvailable
-      ? maibotService.url
-      : null;
   const qqBackendService = serviceById.get("napcat");
   const qqBackendName =
     qqBackendService?.name ?? (snapshot?.initState.qqBackend === "snowluma" ? "SnowLuma" : "NapCat");
@@ -1771,6 +1767,15 @@ export function DesktopShell(): React.JSX.Element {
     </TabsList>
   );
 
+  const maibotWebuiStatusPanel = (
+    <MaiBotWebuiStatusPanel
+      busy={actionBusy?.startsWith("maibot:") ?? false}
+      onStart={startService}
+      retro={useRetroChrome}
+      service={maibotService}
+    />
+  );
+
   if (floatingMode) {
     return (
       <TooltipProvider delayDuration={250}>
@@ -1876,22 +1881,16 @@ export function DesktopShell(): React.JSX.Element {
                   active={activeTab === "maibot"}
                   onWebuiIdentity={rememberWebuiIdentity}
                   readMaiBotAppearance
+                  loadingFallback={maibotWebuiStatusPanel}
                   title="MaiBot WebUI"
                   toolbarPlacement="external"
                   toolbarTarget={webviewToolbarHost}
-                  reloadTrigger={maibotWebviewReloadTrigger
-                    ? `${maibotWebviewReloadTrigger}:${maibotWebviewNavigationRequest}`
-                    : null}
+                  reloadTrigger={maibotWebviewNavigationRequest}
                   url={maibotWebviewTarget.entryUrl}
                   navigationTargetUrl={maibotWebviewTarget.targetUrl}
                 />
               ) : (
-                <MaiBotWebuiStatusPanel
-                  busy={actionBusy?.startsWith("maibot:") ?? false}
-                  onStart={startService}
-                  retro={useRetroChrome}
-                  service={maibotService}
-                />
+                maibotWebuiStatusPanel
               )}
             </TabsContent>
 
@@ -1905,6 +1904,9 @@ export function DesktopShell(): React.JSX.Element {
               >
                 <TerminalPanel
                   active={activeTab === "terminal"}
+                  onStartService={startService}
+                  onStopService={stopService}
+                  serviceActionBusy={actionBusy}
                   recentLogs={snapshot?.recentLogs ?? []}
                   requestedSessionId={terminalFocusSessionId}
                   retro={useRetroChrome}

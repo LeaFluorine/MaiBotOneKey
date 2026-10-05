@@ -34,7 +34,7 @@ function useWindowState(): WindowState {
     bridge.getState().then((next) => {
       if (mounted) setState(next);
     });
-    const off = bridge.onState((next) => setState(next));
+    const off = bridge.onState((next) => setState((current) => ({ ...current, ...next })));
     return () => {
       mounted = false;
       off();
@@ -48,7 +48,7 @@ function MacTrafficLights(): React.JSX.Element {
   const bridge = window.maibotDesktop?.window;
   return (
     <div
-      className="flex items-center gap-1.5 px-2.5"
+      className="app-window-controls flex items-center gap-1.5 px-2.5"
       data-app-region="no-drag"
       aria-label="窗口控制"
     >
@@ -80,7 +80,7 @@ function MacTrafficLights(): React.JSX.Element {
   );
 }
 
-function WinControls({ isMaximized, retro = false }: { isMaximized: boolean; retro?: boolean }): React.JSX.Element {
+function WinControls({ isMaximized, miniMode = false, retro = false }: { isMaximized: boolean; miniMode?: boolean; retro?: boolean }): React.JSX.Element {
   const bridge = window.maibotDesktop?.window;
   const baseBtn =
     "grid h-7 w-8 place-items-center text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus:outline-none";
@@ -90,7 +90,7 @@ function WinControls({ isMaximized, retro = false }: { isMaximized: boolean; ret
       data-app-region="no-drag"
       style={{
         paddingRight: retro
-          ? "clamp(0px, calc(var(--app-window-radius, 16px) * 0.8 + 2px), 32px)"
+          ? "clamp(12px, calc(var(--app-window-radius, 16px) * 0.8 + 2px), 32px)"
           : undefined,
       }}
     >
@@ -103,7 +103,7 @@ function WinControls({ isMaximized, retro = false }: { isMaximized: boolean; ret
         <Minus className="size-3.5" strokeWidth={2} />
       </button>
       <button
-        aria-label={isMaximized ? "还原" : "最大化"}
+        aria-label={miniMode ? "退出迷你模式" : isMaximized ? "还原" : "最大化"}
         className={baseBtn}
         onClick={() => bridge?.toggleMaximize()}
         type="button"
@@ -201,7 +201,7 @@ export function Titlebar({
       {isMac ? <MacTrafficLights /> : null}
 
       {/* Brand */}
-      <div className="flex items-center gap-2.5 pl-4 pr-1.5" data-app-region="no-drag">
+      <div className="app-titlebar-brand flex items-center gap-2.5 pl-4 pr-1.5" data-app-region="no-drag">
         <span
           aria-label={`切换主题：当前${themeLabels[theme.preference]}，点击切换到${themeLabels[nextTheme]}`}
           className="relative block size-[18px] shrink-0 overflow-hidden rounded-full bg-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
@@ -233,7 +233,7 @@ export function Titlebar({
 
       <div
         className={cn(
-          "flex min-w-0 items-center gap-1.5",
+          "app-titlebar-core flex min-w-0 items-center gap-1.5",
           navigation ? "shrink-0 pr-5" : "flex-1",
           isMac ? "justify-center px-3" : "px-1",
         )}
@@ -249,11 +249,11 @@ export function Titlebar({
       </div>
 
       {navigation ? (
-        <div className="ml-2 min-w-0 self-end pt-1" data-app-region="no-drag">
+        <div className="app-titlebar-navigation ml-2 min-w-0 self-end pt-1" data-app-region="no-drag">
           {navigation}
         </div>
       ) : null}
-      {toolbar ?? (navigation ? <div className="min-w-4 flex-1" /> : null)}
+      <div className="app-titlebar-toolbar flex min-w-0 flex-1">{toolbar ?? (navigation ? <div className="min-w-4 flex-1" /> : null)}</div>
 
       {/* Right cluster */}
       {actions ? (
@@ -262,7 +262,7 @@ export function Titlebar({
         </div>
       ) : null}
 
-      {!isMac ? <WinControls isMaximized={state.isMaximized} retro={retro} /> : null}
+      {!isMac ? <WinControls isMaximized={state.isMaximized} miniMode={state.isMiniMode} retro={retro} /> : null}
     </div>
   );
 }

@@ -153,6 +153,7 @@ import {
   getWindowWorkAreaBounds,
   isWindowVisuallyMaximized,
 } from "../window-state";
+import { getMiniWindowBounds } from "../mini-window-bounds";
 
 let previousCpuSample: { idle: number; total: number } | null = null;
 
@@ -1714,6 +1715,9 @@ export function registerAppIpc({
   let remoteModuleVersionsRefreshPromise: Promise<void> | null = null;
   let initDependencyRefreshPromise: Promise<void> | null = null;
   let floatingMode = false;
+  let miniMode = false;
+  let miniRestoreBounds: Electron.Rectangle | null = null;
+  let miniRestoreMaximized = false;
   let floatingBubbleExpanded = false;
   let floatingEdgeSide: "left" | "right" | null = null;
   let floatingGlassEffect = false;
@@ -1728,7 +1732,10 @@ export function registerAppIpc({
   let maiBotBackupAbortController: AbortController | null = null;
 
   const readManagedWindowState = (window: BrowserWindow | null): WindowState =>
-    readWindowState(window, floatingMode, floatingEdgeSide, shellMaximized);
+    ({
+      ...readWindowState(window, floatingMode, floatingEdgeSide, shellMaximized),
+      isMiniMode: miniMode,
+    });
 
   const readMaiBotUpdateSelection = async (): Promise<
     Pick<
@@ -1866,8 +1873,8 @@ export function registerAppIpc({
     window.setResizable(false);
     window.setMaximizable(true);
     window.setMinimumSize(
-      NORMAL_MINIMUM_SIZE.width,
-      NORMAL_MINIMUM_SIZE.height,
+      miniMode ? 1 : NORMAL_MINIMUM_SIZE.width,
+      miniMode ? 1 : NORMAL_MINIMUM_SIZE.height,
     );
   };
 
@@ -2033,7 +2040,7 @@ export function registerAppIpc({
       return readManagedWindowState(window);
     }
     if (
-      floatingMode ||
+      floatingMode || miniMode ||
       isShellWindowMaximized(window) ||
       window.isFullScreen() ||
       !WINDOW_RESIZE_EDGES.has(edge)
@@ -2059,7 +2066,7 @@ export function registerAppIpc({
     }
     if (
       !resizeState ||
-      floatingMode ||
+      floatingMode || miniMode ||
       isShellWindowMaximized(window) ||
       window.isFullScreen()
     ) {
@@ -2150,6 +2157,34 @@ export function registerAppIpc({
       return sendWindowState(window);
     }
 
+    return sendWindowState(window);
+  };
+
+  const applyMiniMode = (enabled: boolean): WindowState => {
+    const window = getMainWindow();
+    if (!window || window.isDestroyed()) return readManagedWindowState(window);
+    if (floatingMode) applyFloatingMode(false);
+    if (miniMode === enabled) return sendWindowState(window);
+    resizeState = null;
+    if (enabled) {
+      miniRestoreMaximized = isShellWindowMaximized(window);
+      miniRestoreBounds = miniRestoreMaximized ? getShellRestoreBounds(window) : window.getBounds();
+      shellMaximized = false;
+      shellRestoreBounds = null;
+      if (window.isFullScreen()) window.setFullScreen(false);
+      if (window.isMaximized()) window.unmaximize();
+      miniMode = true;
+      restoreNormalWindowChrome(window);
+      window.setBounds(getMiniWindowBounds(getWindowWorkAreaBounds(window)));
+    } else {
+      miniMode = false;
+      restoreNormalWindowChrome(window);
+      window.setBounds(clampNormalBounds(miniRestoreBounds ?? fallbackNormalBounds(window)));
+      if (miniRestoreMaximized) maximizeShellWindow(window);
+      miniRestoreBounds = null;
+      miniRestoreMaximized = false;
+    }
+    window.show();
     return sendWindowState(window);
   };
 
@@ -4438,6 +4473,7 @@ export function registerAppIpc({
   ipcMain.handle("desktop:window:toggleMaximize", (): WindowState | void => {
     const window = getMainWindow();
     if (!window) return;
+    if (miniMode) return applyMiniMode(false);
     return isShellWindowMaximized(window)
       ? restoreShellWindow(window)
       : maximizeShellWindow(window);
@@ -4446,6 +4482,11 @@ export function registerAppIpc({
   ipcMain.handle("desktop:window:close", (): void => {
     getMainWindow()?.close();
   });
+
+  ipcMain.handle(
+    "desktop:window:setMiniMode",
+    (_event, enabled: boolean): WindowState => applyMiniMode(enabled === true),
+  );
 
   ipcMain.handle(
     "desktop:window:setFloatingMode",

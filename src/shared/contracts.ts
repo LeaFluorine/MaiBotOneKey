@@ -388,6 +388,7 @@ export interface LauncherUpdateApplyResult {
 }
 
 export interface WindowState {
+  isMiniMode?: boolean;
   isMaximized: boolean;
   isFullScreen: boolean;
   isFocused: boolean;
@@ -1414,6 +1415,7 @@ export interface DesktopBridge {
     toggleMaximize: () => Promise<WindowState>;
     close: () => Promise<void>;
     setFloatingMode: (enabled: boolean) => Promise<WindowState>;
+    setMiniMode: (enabled: boolean) => Promise<WindowState>;
     setFloatingGlassEffect: (enabled: boolean) => Promise<WindowState>;
     setFloatingBubbleExpanded: (expanded: boolean) => Promise<WindowState>;
     moveFloatingBy: (deltaX: number, deltaY: number) => Promise<WindowState>;

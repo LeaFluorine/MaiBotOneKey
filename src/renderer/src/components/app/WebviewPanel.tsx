@@ -1,6 +1,8 @@
 import {
   ExternalLink,
   Loader2,
+  Minus,
+  Plus,
   RotateCw,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
@@ -10,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useShortcut } from "@/lib/use-shortcut";
 import { parseMaiBotTheme, READ_MAIBOT_THEME_SCRIPT, rememberMaiBotTheme } from "@/lib/maibot-theme";
+import { READ_MAIBOT_CONTENT_SCRIPT, waitForWebviewContent } from "@/lib/webview-readiness";
 
 interface WebviewPanelProps {
   readMaiBotAppearance?: boolean;
+  loadingFallback?: ReactNode;
   title: string;
   url: string;
   /** When false, this panel is hidden and shortcuts are disabled. */
@@ -22,20 +26,20 @@ interface WebviewPanelProps {
   toolbarPlacement?: "internal" | "external";
   toolbarTarget?: HTMLElement | null;
   toolbarActions?: ReactNode;
+  showZoomControls?: boolean;
   showExternalToolbarMetadata?: boolean;
   /** After authentication lands on the WebUI home page, continue to this URL. */
   navigationTargetUrl?: string;
   onWebuiIdentity?: (identity: { userId?: string; userName?: string }) => void;
 }
 
-type LoadState = "idle" | "loading" | "ready" | "error";
+type LoadState = "loading" | "ready" | "error";
 
 type WebviewElement = HTMLElement & {
   executeJavaScript?: (code: string, userGesture?: boolean) => Promise<unknown>;
   getURL?: () => string;
   loadURL?: (url: string) => Promise<void> | void;
-  reload?: () => void;
-  reloadIgnoringCache?: () => void;
+  setZoomFactor?: (factor: number) => void;
 };
 
 type DidFailLoadEvent = Event & {
@@ -47,9 +51,13 @@ type DidFailLoadEvent = Event & {
 type WebviewNavigationEvent = Event & {
   url?: string;
   isMainFrame?: boolean;
+  isInPlace?: boolean;
 };
 
 const CACHE_BUST_PARAM = "__maibot_webview_cache";
+const MIN_ZOOM_PERCENT = 50;
+const MAX_ZOOM_PERCENT = 200;
+const ZOOM_STEP_PERCENT = 10;
 
 function isDisplayableUrl(value: string | undefined): value is string {
   return Boolean(value && value !== "about:blank");
@@ -76,6 +84,7 @@ function withCacheBust(value: string, token: number): string {
 
 export function WebviewPanel({
   readMaiBotAppearance = false,
+  loadingFallback,
   title,
   url,
   active = true,
@@ -83,22 +92,72 @@ export function WebviewPanel({
   toolbarPlacement = "internal",
   toolbarTarget = null,
   toolbarActions,
+  showZoomControls = false,
   showExternalToolbarMetadata = true,
   navigationTargetUrl,
   onWebuiIdentity,
 }: WebviewPanelProps): React.JSX.Element {
   const webviewRef = useRef<WebviewElement | null>(null);
   const domReadyRef = useRef(false);
-  const failedRef = useRef(false);
-  const hasRenderedPageRef = useRef(false);
+  const documentVersionRef = useRef(0);
+  const loadStateRef = useRef<LoadState>("loading");
+  const retryCountRef = useRef(0);
   const reloadTriggerRef = useRef<WebviewPanelProps["reloadTrigger"]>(reloadTrigger);
   const navigationTargetAttemptedRef = useRef(false);
-  const [loadState, setLoadState] = useState<LoadState>("idle");
-  const [hasRenderedPage, setHasRenderedPage] = useState(false);
+  const [loadState, setLoadStateValue] = useState<LoadState>("loading");
+  const setLoadState = useCallback((state: LoadState) => {
+    loadStateRef.current = state;
+    setLoadStateValue(state);
+  }, []);
   const [currentUrl, setCurrentUrl] = useState(url);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [cacheBustToken, setCacheBustToken] = useState(() => Date.now());
-  const webviewUrl = withCacheBust(url, cacheBustToken);
+  const [reloadKey, setReloadKey] = useState(() => Date.now());
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const zoomPercentRef = useRef(zoomPercent);
+  zoomPercentRef.current = zoomPercent;
+  const webviewUrl = withCacheBust(url, reloadKey);
+
+  const applyZoom = useCallback(() => {
+    if (!showZoomControls || !domReadyRef.current) return;
+    try {
+      webviewRef.current?.setZoomFactor?.(zoomPercentRef.current / 100);
+    } catch {
+      // A navigation may temporarily detach the guest; dom-ready reapplies it.
+    }
+  }, [showZoomControls]);
+
+  useEffect(() => {
+    applyZoom();
+  }, [applyZoom, zoomPercent]);
+
+  const zoomControls = showZoomControls ? (
+    <div aria-label="页面缩放" className="flex shrink-0 items-center gap-1" role="group">
+      <Button
+        aria-label="缩小页面"
+        className="h-7 px-2 text-[11px]"
+        disabled={loadState !== "ready" || zoomPercent <= MIN_ZOOM_PERCENT}
+        onClick={() => setZoomPercent((current) => Math.max(MIN_ZOOM_PERCENT, current - ZOOM_STEP_PERCENT))}
+        size="sm"
+        title="缩小页面"
+        variant="ghost"
+      >
+        <Minus />
+      </Button>
+      <output aria-label="页面缩放比例" aria-live="polite" className="min-w-[4ch] text-center text-[11px] tabular-nums">
+        {zoomPercent}%
+      </output>
+      <Button
+        aria-label="放大页面"
+        className="h-7 px-2 text-[11px]"
+        disabled={loadState !== "ready" || zoomPercent >= MAX_ZOOM_PERCENT}
+        onClick={() => setZoomPercent((current) => Math.min(MAX_ZOOM_PERCENT, current + ZOOM_STEP_PERCENT))}
+        size="sm"
+        title="放大页面"
+        variant="ghost"
+      >
+        <Plus />
+      </Button>
+    </div>
+  ) : null;
 
   const readLiveWebviewUrl = useCallback(() => {
     if (!domReadyRef.current) {
@@ -118,57 +177,28 @@ export function WebviewPanel({
   }, [readLiveWebviewUrl, url]);
 
   const remountWebview = useCallback(() => {
+    documentVersionRef.current += 1;
     domReadyRef.current = false;
     setLoadState("loading");
-    setCacheBustToken(Date.now());
-    setReloadKey((current) => current + 1);
-  }, []);
+    setReloadKey((current) => Math.max(Date.now(), current + 1));
+  }, [setLoadState]);
 
   const clearWebviewCache = useCallback(async () => {
     await window.maibotDesktop?.clearWebviewCache?.();
   }, []);
 
   const handleLoadUrlFailure = useCallback(() => {
-    if (hasRenderedPageRef.current) {
-      setLoadState("ready");
-      return;
-    }
-
-    failedRef.current = true;
     domReadyRef.current = false;
     setLoadState("error");
-  }, []);
+  }, [setLoadState]);
 
   const refresh = useCallback(async () => {
+    retryCountRef.current = 0;
+    domReadyRef.current = false;
     setLoadState("loading");
     await clearWebviewCache().catch(() => undefined);
-
-    const webview = webviewRef.current;
-    if (domReadyRef.current && webview?.loadURL) {
-      try {
-        // A dedicated embedded panel should refresh its actual destination,
-        // not replay the one-time token authentication entry page.
-        const nextUrl = withCacheBust(navigationTargetUrl ?? url, Date.now());
-        const navigation = webview.loadURL(nextUrl);
-        if (navigation && typeof navigation.catch === "function") {
-          void navigation.catch(handleLoadUrlFailure);
-        }
-        return;
-      } catch {
-        /* fall through to reload/remount */
-      }
-    }
-    if (domReadyRef.current && (webview?.reloadIgnoringCache || webview?.reload)) {
-      try {
-        webview.reloadIgnoringCache?.() ?? webview.reload?.();
-        return;
-      } catch {
-        /* fall through to remount */
-      }
-    }
-
     remountWebview();
-  }, [clearWebviewCache, handleLoadUrlFailure, navigationTargetUrl, remountWebview, url]);
+  }, [clearWebviewCache, remountWebview, setLoadState]);
 
   const openExternal = useCallback(() => {
     externalOpen(currentUrl);
@@ -184,22 +214,20 @@ export function WebviewPanel({
 
     reloadTriggerRef.current = reloadTrigger;
     if (reloadTrigger) {
-      void clearWebviewCache()
-        .catch(() => undefined)
-        .finally(remountWebview);
+      retryCountRef.current = 0;
+      remountWebview();
     }
-  }, [clearWebviewCache, reloadTrigger, remountWebview]);
+  }, [reloadTrigger, remountWebview]);
 
   // Reset state when URL or remount key changes.
   useLayoutEffect(() => {
     domReadyRef.current = false;
-    failedRef.current = false;
-    hasRenderedPageRef.current = false;
     navigationTargetAttemptedRef.current = false;
-    setHasRenderedPage(false);
     setLoadState("loading");
     setCurrentUrl(url);
-  }, [navigationTargetUrl, url, reloadKey, webviewUrl]);
+  }, [navigationTargetUrl, url, reloadKey, setLoadState]);
+
+  useEffect(() => { retryCountRef.current = 0; }, [url, navigationTargetUrl]);
 
   // Wire webview events.
   useLayoutEffect(() => {
@@ -208,13 +236,6 @@ export function WebviewPanel({
       return;
     }
 
-    const handleStart = (): void => {
-      // A new navigation starts. Before the first successful page load, show
-      // the connection fallback; after that, keep WebUI route changes visible.
-      failedRef.current = false;
-      syncCurrentUrl();
-      setLoadState(hasRenderedPageRef.current ? "ready" : "loading");
-    };
     const continueToNavigationTarget = (candidateUrl?: string): boolean => {
       if (
         !navigationTargetUrl ||
@@ -237,10 +258,14 @@ export function WebviewPanel({
         }
 
         navigationTargetAttemptedRef.current = true;
+        documentVersionRef.current += 1;
+        domReadyRef.current = false;
         setLoadState("loading");
         const navigation = webview.loadURL?.(navigationTargetUrl);
         if (navigation && typeof navigation.catch === "function") {
-          void navigation.catch(handleLoadUrlFailure);
+          void navigation.catch(() => {
+            if (webviewRef.current === webview) handleLoadUrlFailure();
+          });
         }
         return true;
       } catch {
@@ -250,20 +275,19 @@ export function WebviewPanel({
     const handleReady = (event: Event): void => {
       // Chromium also fires dom-ready / did-finish-load for its built-in
       // error page; ignore those so the overlay stays visible.
-      if (failedRef.current) {
+      if (loadStateRef.current === "error") {
         return;
       }
       if (event.type === "dom-ready") {
         domReadyRef.current = true;
       }
+      applyZoom();
       const liveUrl = readLiveWebviewUrl();
       if (continueToNavigationTarget(liveUrl)) {
         return;
       }
       syncCurrentUrl();
-      hasRenderedPageRef.current = true;
-      setHasRenderedPage(true);
-      setLoadState("ready");
+      if (!readMaiBotAppearance) setLoadState("ready");
       if (onWebuiIdentity && webview.executeJavaScript) {
         void webview.executeJavaScript(
           `(() => {
@@ -300,19 +324,17 @@ export function WebviewPanel({
       if (failEvent.errorCode === -3 || failEvent.isMainFrame === false) {
         return;
       }
-      if (hasRenderedPageRef.current) {
-        setLoadState("ready");
-        return;
-      }
-
-      failedRef.current = true;
-      domReadyRef.current = false;
-      setLoadState("error");
+      handleLoadUrlFailure();
     };
     const handleNavigation = (event: Event): void => {
       const navigationEvent = event as WebviewNavigationEvent;
       if (navigationEvent.isMainFrame === false) {
         return;
+      }
+      if (event.type === "did-start-navigation" && !navigationEvent.isInPlace) {
+        documentVersionRef.current += 1;
+        domReadyRef.current = false;
+        setLoadState("loading");
       }
       // TanStack Router changes /auth to / without loading a new document, so
       // dom-ready/did-finish-load never fire for the home URL. Catch that SPA
@@ -323,7 +345,6 @@ export function WebviewPanel({
       syncCurrentUrl(navigationEvent.url);
     };
 
-    webview.addEventListener("did-start-loading", handleStart);
     webview.addEventListener("did-start-navigation", handleNavigation);
     webview.addEventListener("did-redirect-navigation", handleNavigation);
     webview.addEventListener("did-navigate", handleNavigation);
@@ -334,7 +355,6 @@ export function WebviewPanel({
     webview.addEventListener("did-fail-load", handleFail);
 
     return () => {
-      webview.removeEventListener("did-start-loading", handleStart);
       webview.removeEventListener("did-start-navigation", handleNavigation);
       webview.removeEventListener("did-redirect-navigation", handleNavigation);
       webview.removeEventListener("did-navigate", handleNavigation);
@@ -344,7 +364,34 @@ export function WebviewPanel({
       webview.removeEventListener("dom-ready", handleReady);
       webview.removeEventListener("did-fail-load", handleFail);
     };
-  }, [handleLoadUrlFailure, navigationTargetUrl, onWebuiIdentity, readLiveWebviewUrl, reloadKey, syncCurrentUrl, url]);
+  }, [applyZoom, handleLoadUrlFailure, navigationTargetUrl, onWebuiIdentity, readLiveWebviewUrl, readMaiBotAppearance, reloadKey, syncCurrentUrl, url, setLoadState]);
+
+  useEffect(() => {
+    if (loadState !== "loading") return;
+    const controller = new AbortController();
+    const webview = webviewRef.current;
+    void waitForWebviewContent(async () => {
+      if (!domReadyRef.current) return false;
+      const version = documentVersionRef.current;
+      if (!readMaiBotAppearance) return true;
+      const ready = await webview?.executeJavaScript?.(READ_MAIBOT_CONTENT_SCRIPT);
+      return ready === true && domReadyRef.current && version === documentVersionRef.current &&
+        loadStateRef.current === "loading";
+    }, controller.signal).then((ready) => {
+      if (controller.signal.aborted || loadStateRef.current !== "loading") return;
+      setLoadState(ready ? "ready" : "error");
+    });
+    return () => controller.abort();
+  }, [loadState, readMaiBotAppearance, webviewUrl, reloadKey, setLoadState]);
+
+  useEffect(() => {
+    if (loadState !== "error" || retryCountRef.current >= 3) return;
+    const timer = window.setTimeout(() => {
+      retryCountRef.current += 1;
+      remountWebview();
+    }, 1000 * 2 ** retryCountRef.current);
+    return () => window.clearTimeout(timer);
+  }, [loadState, reloadKey, remountWebview]);
 
   useEffect(() => {
     if (!readMaiBotAppearance) return;
@@ -352,7 +399,7 @@ export function WebviewPanel({
     let reading = false;
     const sync = async (): Promise<void> => {
       const webview = webviewRef.current;
-      if (disposed || reading || !domReadyRef.current || failedRef.current || !webview?.executeJavaScript) return;
+      if (disposed || reading || !domReadyRef.current || loadStateRef.current !== "ready" || !webview?.executeJavaScript) return;
       reading = true;
       try {
         const theme = parseMaiBotTheme(await webview.executeJavaScript(READ_MAIBOT_THEME_SCRIPT));
@@ -368,8 +415,7 @@ export function WebviewPanel({
     return () => { disposed = true; window.clearInterval(timer); };
   }, [readMaiBotAppearance, reloadKey, url]);
 
-  const showLoading = !hasRenderedPage && (loadState === "idle" || loadState === "loading");
-  const showWebview = hasRenderedPage || loadState === "ready" || loadState === "error";
+  const showWebview = loadState === "ready";
   const toolbar = (
     <WebviewToolbar
       embedded={toolbarPlacement === "external"}
@@ -378,6 +424,7 @@ export function WebviewPanel({
       onRefresh={refresh}
       showMetadata={showExternalToolbarMetadata}
       url={currentUrl}
+      zoomControls={zoomControls}
     />
   );
 
@@ -422,6 +469,7 @@ export function WebviewPanel({
           </code>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {zoomControls}
           <Button
             aria-label="刷新"
             className="h-7 px-2 text-[11px]"
@@ -448,25 +496,37 @@ export function WebviewPanel({
 
       <div className="relative min-h-0 flex-1">
         <webview
+          // React drops unknown boolean attributes; Electron needs this attribute present.
+          allowpopups={"" as unknown as boolean}
           // Keep webview in DOM while its first document loads.
-          className={`absolute inset-0 size-full bg-white transition-opacity duration-200 ${
+          className={`absolute inset-0 size-full bg-background transition-opacity duration-200 ${
             showWebview ? "opacity-100" : "opacity-0"
           }`}
-          key={`${webviewUrl}:${reloadKey}`}
+          key={webviewUrl}
           partition="persist:maibot-webui"
           ref={webviewRef}
           src={webviewUrl}
           webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=yes"
         />
 
-        {showLoading ? (
+        {!showWebview ? (
           <div
             aria-label={`正在载入 ${title}`}
             aria-live="polite"
             className="absolute inset-0 grid place-items-center bg-background"
             role="status"
           >
-            <Loader2 className="size-6 animate-spin text-primary" />
+            {loadState === "error" && retryCountRef.current >= 3 ? (
+              <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
+                <p>{title} 暂不可访问，请确认服务已启动。</p>
+                <Button onClick={refresh} size="sm" variant="outline"><RotateCw />重新加载</Button>
+              </div>
+            ) : loadingFallback ?? (
+              <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p>{loadState === "error" ? "连接未成功，正在重试…" : `正在载入 ${title}…`}</p>
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -482,6 +542,7 @@ function WebviewToolbar({
   onRefresh,
   showMetadata,
   url,
+  zoomControls,
 }: {
   embedded: boolean;
   loadState: LoadState;
@@ -489,6 +550,7 @@ function WebviewToolbar({
   onRefresh: () => void;
   showMetadata: boolean;
   url: string;
+  zoomControls: ReactNode;
 }): React.JSX.Element {
   return (
     <div
@@ -512,6 +574,7 @@ function WebviewToolbar({
         </div>
       ) : null}
       <div className="flex shrink-0 items-center gap-1">
+        {zoomControls}
         <Button
           aria-label="刷新"
           className={cn(embedded ? "h-6" : "h-7", "px-2 text-[11px]")}

@@ -60,6 +60,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { localChatErrorMessage } from "@/lib/local-chat-error";
 import { QQ_OFFICIAL_ADAPTER_PLUGIN_ID } from "@shared/qq-official-adapter";
+import { resolveMaiBotUpdateTarget } from "@shared/maibot-update-target";
 import {
   QQ_WEBUI_PORT_CHANGE_EVENT,
   isValidPortText,
@@ -352,7 +353,7 @@ function DetailRow({
   retro?: boolean;
 }): React.JSX.Element {
   return (
-    <div className={cn("flex items-center justify-between gap-3", className)}>
+    <div className={cn("flex min-w-0 items-center justify-between gap-3", className)}>
       <span className="shrink-0 text-muted-foreground">{label}</span>
       <span
         className={cn(
@@ -1273,17 +1274,15 @@ export function MessagePlatformPanel({
   );
   const defaultMaiBotHistoryTag = maibotHistoryTags[0]?.name;
   const selectedMaiBotHistoryTag = selectedMaiBotTag || defaultMaiBotHistoryTag;
-  const selectedMaiBotTarget = useMemo<ModuleUpdateTarget | undefined>(() => (
-    maibotChannel === "stable"
-      ? { type: "branch", name: "main" }
-      : maibotChannel === "other" && maibotOtherTargetMode === "tag" && selectedMaiBotHistoryTag
-        ? { type: "tag", name: selectedMaiBotHistoryTag }
-        : maibotChannel === "other" && maibotOtherTargetMode === "dev"
-          ? { type: "branch", name: "dev" }
-          : undefined
+  const selectedMaiBotTarget = useMemo(() => resolveMaiBotUpdateTarget(
+    maibotChannel,
+    maibotOtherTargetMode,
+    snapshot.moduleVersions.maibotLatestStableTag,
+    selectedMaiBotHistoryTag,
   ), [
     maibotChannel,
     maibotOtherTargetMode,
+    snapshot.moduleVersions.maibotLatestStableTag,
     selectedMaiBotHistoryTag,
   ]);
   const maibotTargetIsCurrent =
@@ -1295,7 +1294,7 @@ export function MessagePlatformPanel({
     && compareVersionText(selectedMaiBotTarget.name, versionAsTag(snapshot.moduleVersions.maibotLocal)) === 0;
 
   const maibotTargets: Record<MaiBotUpdateChannel, string | undefined> = {
-    stable: "正式版最新内容",
+    stable: snapshot.moduleVersions.maibotLatestStableTag,
     other: maibotOtherTargetMode === "dev" ? "Dev 最新内容" : selectedMaiBotHistoryTag,
   };
   const maibotDevBranchAvailable = maibotBranches.length === 0 || availableMaiBotBranches.has("dev");
@@ -1864,7 +1863,6 @@ export function MessagePlatformPanel({
       return;
     }
     if (maibotTargetIsCurrent) {
-      setError("当前已经是这个 MaiBot 版本，无需重复更新");
       return;
     }
 
@@ -1965,7 +1963,11 @@ export function MessagePlatformPanel({
       ) : maibotUpdateInfo ? (
         <p className="text-xs text-muted-foreground">这个目标版本没有可展示的 Release 更新说明。</p>
       ) : (
-        <p className="text-xs text-muted-foreground">选择目标版本后会在这里显示 Release 更新说明。</p>
+        <p className="text-xs text-muted-foreground">
+          {maibotChannel === "stable" && !selectedMaiBotTarget
+            ? "尚未获取到正式 Release，请等待版本查询完成或重试。"
+            : "选择目标版本后会在这里显示更新说明。"}
+        </p>
       )}
     </div>
   );
@@ -2473,7 +2475,7 @@ export function MessagePlatformPanel({
           ) : (
           <DialogBody className="grid h-[min(70vh,640px)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.9fr)]">
             <div className="grid min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto] gap-3">
-              <div className="grid min-h-0 gap-4 overflow-auto pr-1">
+              <div className="grid min-h-0 min-w-0 grid-cols-[minmax(0,1fr)] content-start gap-4 overflow-auto pr-1">
             {error && updateDialog === "maibot" ? (
               <div className={cn("border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive", useRetroStyle ? "rounded-sm" : "rounded-lg")}>
                 {error}
@@ -2492,11 +2494,6 @@ export function MessagePlatformPanel({
             {maibotUpdateBlocked ? (
               <div className={cn("border border-warning/40 bg-warning/15 px-3 py-2 text-xs", useRetroStyle ? "rounded-sm" : "rounded-lg")}>
                 请先停止 MaiBot Core，再执行更新。
-              </div>
-            ) : null}
-            {maibotTargetIsCurrent ? (
-              <div className="-my-2 px-1 text-sm font-semibold text-destructive">
-                当前已经是这个 MaiBot 版本，无需重复更新。
               </div>
             ) : null}
             <div className="grid gap-1.5">
@@ -2613,11 +2610,11 @@ export function MessagePlatformPanel({
                 <div
                   aria-hidden={maibotChannel !== "other"}
                   className={cn(
-                    useRetroStyle ? "retro-control grid h-full gap-2 p-2 md:grid-cols-[220px_minmax(0,1fr)]" : "grid h-full gap-2 rounded-lg border border-border bg-muted/40 p-2 md:grid-cols-[220px_minmax(0,1fr)]",
+                    useRetroStyle ? "retro-control grid h-full min-w-0 gap-2 p-2 md:grid-cols-2" : "grid h-full min-w-0 gap-2 rounded-lg border border-border bg-muted/40 p-2 md:grid-cols-2",
                     maibotChannel !== "other" && "pointer-events-none invisible",
                   )}
                 >
-                  <label className="grid gap-1.5 text-xs font-medium">
+                  <label className="grid min-w-0 gap-1.5 text-xs font-medium">
                     更新方式
                     <div className={cn("grid h-9 grid-cols-2 gap-1 border border-input bg-background p-0.5", useRetroStyle ? "rounded-sm" : "rounded-md")}>
                       {([
@@ -2657,7 +2654,7 @@ export function MessagePlatformPanel({
                   <label
                     aria-hidden={maibotOtherTargetMode !== "tag"}
                     className={cn(
-                      "grid gap-1.5 text-xs font-medium",
+                      "grid min-w-0 gap-1.5 text-xs font-medium",
                       maibotOtherTargetMode !== "tag" && "pointer-events-none invisible",
                     )}
                   >
@@ -2696,8 +2693,8 @@ export function MessagePlatformPanel({
                 />
               </button>
               {moduleSourceExpanded ? (
-                <div className="grid gap-2 md:grid-cols-[220px_minmax(0,1fr)_auto] md:items-end">
-                    <label className="grid gap-1.5 text-xs font-medium">
+                <div className="grid min-w-0 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] md:items-end">
+                    <label className="grid min-w-0 gap-1.5 text-xs font-medium">
                       源预设
                       <select
                         className={cn("h-9 border border-input bg-background px-3 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring/60", useRetroStyle ? "rounded-sm" : "rounded-md")}
@@ -2716,7 +2713,7 @@ export function MessagePlatformPanel({
                         ))}
                       </select>
                     </label>
-                    <label className="grid gap-1.5 text-xs font-medium">
+                    <label className="grid min-w-0 gap-1.5 text-xs font-medium">
                       当前解析地址
                       <Input
                         disabled

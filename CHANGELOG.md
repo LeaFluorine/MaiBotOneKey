@@ -6,7 +6,7 @@
 - Windows 默认同时构建标准包（干净 Python）和完整包（预装 MaiBot 依赖），工程分别保留两个 Python 环境；保留单独构建不含 NapCat 的 SnowLuma 版命令。
 - 未来复古外观将页面标签和工具按钮整合到标题栏，标签采用扁平、重叠的文件夹样式与硬阴影。
 - “聊聊”统一在 MaiBot 页面打开，点击 MaiBot 标签回到 WebUI 首页。
-- 正式版 MaiBot 更新跟随 main 分支，并修正同版本分支与 Tag 的切换判断。
+- 正式版 MaiBot 更新使用最新已发布的正式 Release Tag，更新说明读取对应 Release，Dev 更新继续跟随 dev 分支；允许从同版本分支切换到正式 Tag。
 - 精简快捷操作面板，移除独立 MaiBot Lite 实验构建。
 
 ## 0.5.1 - 2026-09-27

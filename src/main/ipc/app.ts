@@ -9,6 +9,7 @@ import {
 } from "electron";
 import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
+import { publishedStableReleaseTags, resolveMaiBotUpdateTarget } from "../../shared/maibot-update-target";
 import { createWriteStream, existsSync, type WriteStream } from "node:fs";
 import {
   mkdir,
@@ -1117,7 +1118,7 @@ function formatBranchCommitNotes(
     return undefined;
   }
 
-  return `## dev 最新提交\n\n分支：\`${branch}\`\n\n${items.join("\n\n")}`;
+  return `## ${branch} 最新提交\n\n分支：\`${branch}\`\n\n${items.join("\n\n")}`;
 }
 
 async function fetchMaiBotBranchCommitNotes(
@@ -2346,20 +2347,29 @@ export function registerAppIpc({
 
   const readRemoteModuleVersions = async (): Promise<ModuleRuntimeVersions> => {
     const versions: ModuleRuntimeVersions = {};
-    if (existsSync(initManager.getGitPath())) {
-      try {
-        const tagsResult = await moduleUpdater.listMaiBotRemoteTagNames();
-        Object.assign(
-          versions,
-          pickLatestTags(Array.from(new Set(tagsResult.tags))),
-        );
-        versions.maibotRemoteSource = tagsResult.remoteUrl;
-      } catch (error) {
-        versions.maibotRemoteError =
-          error instanceof Error ? error.message : String(error);
+    const [tagsResult, releaseResult] = await Promise.allSettled([
+      existsSync(initManager.getGitPath())
+        ? moduleUpdater.listMaiBotRemoteTagNames()
+        : Promise.reject(new Error(`未找到可用 Git: ${initManager.getGitPath()}`)),
+      fetchMaiBotReleases(),
+    ]);
+    if (tagsResult.status === "fulfilled") {
+      versions.maibotLatestPrereleaseTag = pickLatestTags(tagsResult.value.tags).maibotLatestPrereleaseTag;
+      versions.maibotRemoteSource = tagsResult.value.remoteUrl;
+    } else {
+      versions.maibotRemoteError = String(tagsResult.reason);
+    }
+
+    if (releaseResult.status === "fulfilled") {
+      versions.maibotLatestStableTag = pickLatestTags(
+        publishedStableReleaseTags(releaseResult.value),
+      ).maibotLatestStableTag;
+      if (!versions.maibotLatestStableTag) {
+        versions.maibotRemoteError = "未找到已发布的 MaiBot 正式 Release";
       }
     } else {
-      versions.maibotRemoteError = `未找到可用 Git: ${initManager.getGitPath()}`;
+      const detail = releaseResult.reason instanceof Error ? releaseResult.reason.message : String(releaseResult.reason);
+      versions.maibotRemoteError = `获取 MaiBot 正式 Release 失败：${detail}`;
     }
 
     const dashboardVersions = await fetchPypiVersionSummary("maibot-dashboard");
@@ -2995,6 +3005,11 @@ export function registerAppIpc({
       event,
       target?: ModuleUpdateTarget,
     ): Promise<ModuleUpdateResult> => {
+      target ??= resolveMaiBotUpdateTarget("stable", "tag", remoteModuleVersionsCache.maibotLatestStableTag, undefined);
+      if (!target || !["tag", "branch"].includes(target.type) || typeof target.name !== "string" || !target.name.trim()) {
+        throw new Error("没有可用的 MaiBot 更新目标，请先获取正式 Release 或选择其他版本");
+      }
+      target = { type: target.type, name: target.name.trim() };
       const maibot = serviceManager
         .snapshot()
         .find((service) => service.id === "maibot");
@@ -3016,7 +3031,6 @@ export function registerAppIpc({
       const result = await moduleUpdater.updateMaiBot(target, sendProgress);
       if (target) {
         await writeMaiBotUpdateSelection(
-          (target.type === "branch" && target.name === "main") ||
           (target.type === "tag" && target.name === remoteModuleVersionsCache.maibotLatestStableTag)
             ? "stable"
             : target.type === "branch" &&

@@ -17,7 +17,7 @@
     "preview": "electron-vite preview",
     "release:check": "bun run scripts/release/check-windows-payload.ts",
     "release:patch-nsis": "bun run scripts/release/patch-electron-builder-nsis.ts",
-    "release:python:full": "runtime\\python\\python.exe scripts/release/prepare-full-python.py",
+    "release:python:full": "./runtime/python/python.exe -I scripts/release/prepare-full-python.py",
     "release:win": "bun run release:check && bun run release:python:full && bun run release:patch-nsis && bun run build && bun run scripts/release/build-windows-variants.ts",
     "release:win:standard": "bun run release:check && bun run release:patch-nsis && bun run build && bun run scripts/release/build-windows-variants.ts --standard-only",
     "release:win:full": "bun run release:check && bun run release:python:full && bun run release:patch-nsis && bun run build && bun run scripts/release/build-windows-variants.ts --full-only",

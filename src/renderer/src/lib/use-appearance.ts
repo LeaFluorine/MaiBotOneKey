@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { MAIBOT_THEME_EVENT, readMaiBotTheme, type MaiBotTheme } from "./maibot-theme";
 
 export type AccentColor = "orange" | "green" | "blue" | "pink" | "neutral";
-export type AppearanceMode = "future-retro" | "modern";
+export type AppearanceMode = "future-retro" | "millennium" | "modern";
 export type FontFamily = "system" | "rounded" | "serif";
-export type InterfaceScale = "compact" | "normal" | "comfortable";
+export type InterfaceScale = "normal" | "comfortable";
 export type WindowCornerRadii = Record<AppearanceMode, number>;
 
 export interface AppearancePreference {
+  followMaiBot: boolean;
   accent: AccentColor;
   font: FontFamily;
   mode: AppearanceMode;
@@ -17,6 +19,7 @@ export interface AppearancePreference {
 }
 
 export interface AppearanceApi extends AppearancePreference {
+  setFollowMaiBot: (enabled: boolean) => void;
   setAccent: (accent: AccentColor) => void;
   setFont: (font: FontFamily) => void;
   setMode: (mode: AppearanceMode) => void;
@@ -35,15 +38,17 @@ export const WINDOW_CORNER_RADIUS_MAX = 32;
 const DEFAULT_APPEARANCE_MODE: AppearanceMode = "future-retro";
 const DEFAULT_WINDOW_CORNER_RADII: WindowCornerRadii = {
   "future-retro": 16,
+  millennium: 0,
   modern: 16,
 };
 
 const DEFAULT_APPEARANCE: AppearancePreference = {
+  followMaiBot: true,
   accent: "orange",
   font: "system",
   mode: DEFAULT_APPEARANCE_MODE,
   retroPaperTexture: true,
-  scale: "normal",
+  scale: "comfortable",
   windowCornerRadius: DEFAULT_WINDOW_CORNER_RADII[DEFAULT_APPEARANCE_MODE],
   windowCornerRadii: DEFAULT_WINDOW_CORNER_RADII,
 };
@@ -56,12 +61,14 @@ const FONT_TOKENS: Record<FontFamily, string> = {
 
 const SCALE_TOKENS: Record<AppearanceMode, Record<InterfaceScale, string>> = {
   "future-retro": {
-    compact: "13.25px",
     normal: "15px",
     comfortable: "17px",
   },
+  millennium: {
+    normal: "15px",
+    comfortable: "16px",
+  },
   modern: {
-    compact: "14px",
     normal: "15px",
     comfortable: "16px",
   },
@@ -84,15 +91,20 @@ function isFontFamily(value: unknown): value is FontFamily {
 }
 
 function isAppearanceMode(value: unknown): value is AppearanceMode {
-  return value === "future-retro" || value === "modern";
+  return value === "future-retro" || value === "millennium" || value === "modern";
+}
+
+// 千禧风格沿用未来复古的 DOM 结构，只换一套视觉。
+export function usesRetroStructure(mode: AppearanceMode): boolean {
+  return mode !== "modern";
 }
 
 function isInterfaceScale(value: unknown): value is InterfaceScale {
-  return value === "compact" || value === "normal" || value === "comfortable";
+  return value === "normal" || value === "comfortable";
 }
 
 function windowCornerRadiusMin(mode: AppearanceMode): number {
-  return mode === "future-retro" ? RETRO_WINDOW_CORNER_RADIUS_MIN : WINDOW_CORNER_RADIUS_MIN;
+  return usesRetroStructure(mode) ? RETRO_WINDOW_CORNER_RADIUS_MIN : WINDOW_CORNER_RADIUS_MIN;
 }
 
 function clampWindowCornerRadius(value: unknown, mode: AppearanceMode): number {
@@ -112,6 +124,7 @@ function normalizeWindowCornerRadii(record: Record<string, unknown>): WindowCorn
 
   return {
     "future-retro": radiusFor("future-retro"),
+    millennium: radiusFor("millennium"),
     modern: radiusFor("modern"),
   };
 }
@@ -125,13 +138,16 @@ function normalizeAppearance(value: unknown): AppearancePreference {
       : DEFAULT_APPEARANCE.mode;
   const windowCornerRadii = normalizeWindowCornerRadii(record);
   return {
+    followMaiBot: typeof record.followMaiBot === "boolean" ? record.followMaiBot : true,
     accent: isAccentColor(record.accent) ? record.accent : DEFAULT_APPEARANCE.accent,
     font: isFontFamily(record.font) ? record.font : DEFAULT_APPEARANCE.font,
     mode,
     retroPaperTexture: typeof record.retroPaperTexture === "boolean"
       ? record.retroPaperTexture
       : DEFAULT_APPEARANCE.retroPaperTexture,
-    scale: isInterfaceScale(record.scale) ? record.scale : DEFAULT_APPEARANCE.scale,
+    scale: record.scale === "compact"
+      ? "normal"
+      : isInterfaceScale(record.scale) ? record.scale : DEFAULT_APPEARANCE.scale,
     windowCornerRadius: windowCornerRadii[mode],
     windowCornerRadii,
   };
@@ -199,6 +215,21 @@ export function useAppearance(): AppearanceApi {
     return () => window.removeEventListener(CHANGE_EVENT, listener);
   }, []);
 
+  useEffect(() => {
+    if (!appearance.followMaiBot) return;
+    const sync = (theme: MaiBotTheme | undefined): void => {
+      if (!theme) return;
+      const current = readStored();
+      if (current.followMaiBot && current.mode !== theme.mode) {
+        saveAppearance(normalizeAppearance({ ...current, mode: theme.mode }));
+      }
+    };
+    sync(readMaiBotTheme());
+    const listener = (event: Event): void => sync((event as CustomEvent<MaiBotTheme>).detail);
+    window.addEventListener(MAIBOT_THEME_EVENT, listener);
+    return () => window.removeEventListener(MAIBOT_THEME_EVENT, listener);
+  }, [appearance.followMaiBot, appearance.mode]);
+
   const update = useCallback((nextValue: Partial<AppearancePreference> | ((current: AppearancePreference) => Partial<AppearancePreference>)) => {
     setAppearance((current) => {
       const partial = typeof nextValue === "function" ? nextValue(current) : nextValue;
@@ -212,7 +243,8 @@ export function useAppearance(): AppearanceApi {
     ...appearance,
     setAccent: (accent) => update({ accent }),
     setFont: (font) => update({ font }),
-    setMode: (mode) => update({ mode }),
+    setMode: (mode) => update({ mode, followMaiBot: false }),
+    setFollowMaiBot: (followMaiBot) => update({ followMaiBot, ...(followMaiBot && readMaiBotTheme() ? { mode: readMaiBotTheme()!.mode } : {}) }),
     setRetroPaperTexture: (retroPaperTexture) => update({ retroPaperTexture }),
     setScale: (scale) => update({ scale }),
     setWindowCornerRadius: (windowCornerRadius) =>

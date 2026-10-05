@@ -1,0 +1,764 @@
+/* 英文和数字用 Pixelify Sans 像素字（OFL 协议，见 assets/fonts/PixelifySans-OFL.txt）。
+   只覆盖拉丁字符，中文落到后面的黑体。 */
+@font-face {
+  font-family: "Pixelify Sans";
+  src: url("../assets/fonts/PixelifySans-Variable.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0000-024F, U+2000-206F, U+20A0-20CF, U+2190-21FF;
+}
+
+/* 千禧风格（data-appearance-mode="millennium"），和 MaiBot WebUI 的千禧风格同一套材质：
+   1. 米黄塑料机壳 —— 窗口、标题栏、面板，带左上亮边、右下暗边和底部厚度；
+   2. 下沉屏幕 —— 输入框、读数、日志、终端这些承载内容的区域；
+   3. 键帽 —— 所有按钮；选中态是按下去的薄荷绿，主操作是珊瑚橙。
+   DOM 结构沿用未来复古（.retro-* 类），这里只换视觉。
+   夜间模式是同一台机器关了灯：炭灰机壳、近黑屏幕，亮色保持不变。 */
+
+:root[data-appearance-mode="millennium"],
+:root[data-appearance-mode="millennium"][data-accent] {
+  --mil-shell: #ddd4bf;
+  --mil-panel: #ebe4d2;
+  --mil-hi: #f6f1e3;
+  --mil-lo: #bdb39c;
+  --mil-drop: #9c927b;
+  --mil-line: #5a544a;
+  --mil-ink: #4a443a;
+  --mil-print: #5f5849;
+  --mil-vent: #a89e87;
+  --mil-screen: #fbf9f0;
+  --mil-screen-ink: #3a3833;
+  --mil-screen-dim: #66625a;
+  --mil-screen-shade: rgb(0 0 0 / 0.16);
+  --mil-screen-grid: rgb(0 0 0 / 0.03);
+  --mil-rule: #d3cec0;
+  --mil-key: #f3eee1;
+  --mil-key-side: #c2b8a1;
+  --mil-key-hi: #fffaf0;
+  --mil-key-hover: #fbf7ec;
+  --mil-on: #8fd6a0;
+  --mil-on-ink: #2f3a2b;
+  --mil-on-side: #5fa873;
+  --mil-accent-text: #2a7d50;
+  --mil-hot: #f08a5d;
+  --mil-hot-ink: #3a2a22;
+  --mil-hot-side: #c2643c;
+  --mil-yellow: #ffd84a;
+  --mil-danger: #c2452f;
+  --mil-danger-side: #8f3020;
+  --mil-led: #4fd07a;
+  --mil-meter: #3fae72;
+  --mil-meter-track: rgb(0 0 0 / 0.13);
+  --mil-plate: #5a544a;
+  --mil-plate-ink: #f3eee1;
+  --mil-veil: rgb(60 54 44 / 0.5);
+  --mil-float-shadow: rgb(74 68 58 / 0.28);
+  --mil-speck: radial-gradient(rgb(90 84 74 / 0.09) 1px, transparent 1px);
+  --mil-screen-tex:
+    linear-gradient(var(--mil-screen-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mil-screen-grid) 1px, transparent 1px);
+  --mil-bevel: inset 2px 2px 0 var(--mil-hi), inset -2px -2px 0 var(--mil-lo);
+  --mil-raise: var(--mil-bevel), 0 4px 0 var(--mil-drop);
+  --mil-float: var(--mil-bevel), 6px 6px 0 var(--mil-float-shadow);
+  --mil-sunk: inset 3px 3px 0 var(--mil-screen-shade);
+  --mil-keycap:
+    inset 0 0 0 2px var(--mil-line), inset 0 -4px 0 var(--mil-key-side),
+    inset 3px 3px 0 var(--mil-key-hi);
+  --mil-pressed: inset 0 0 0 2px var(--mil-line), inset 0 3px 0 var(--mil-on-side);
+  --mil-font: "Pixelify Sans", "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+
+  --background: var(--mil-shell);
+  --foreground: var(--mil-ink);
+  --card: var(--mil-panel);
+  --card-foreground: var(--mil-ink);
+  --popover: var(--mil-panel);
+  --popover-foreground: var(--mil-ink);
+  --primary: var(--mil-on);
+  --primary-foreground: var(--mil-on-ink);
+  --secondary: var(--mil-key);
+  --secondary-foreground: var(--mil-ink);
+  --muted: #e3dbc7;
+  --muted-foreground: var(--mil-print);
+  --accent: #e3dbc7;
+  --accent-foreground: var(--mil-ink);
+  --destructive: var(--mil-danger);
+  --destructive-foreground: #fff4e6;
+  --success: var(--mil-meter);
+  --success-foreground: #1f3a2b;
+  --warning: var(--mil-yellow);
+  --warning-foreground: #3a3206;
+  --border: #8f8672;
+  --input: var(--mil-line);
+  --ring: var(--mil-on-side);
+  --radius: 0px;
+  --scrollbar-thumb: var(--mil-drop);
+  --scrollbar-thumb-hover: var(--mil-line);
+
+  /* 沿用复古结构里直接引用的变量 */
+  --retro-titlebar-line: var(--mil-line);
+  --retro-tabbar-line: var(--mil-line);
+  --retro-paper: var(--mil-shell);
+  --retro-paper-deep: var(--mil-lo);
+  --retro-paper-soft: var(--mil-panel);
+  --retro-paper-lift: transparent;
+  --retro-ink: var(--mil-ink);
+  --retro-ink-soft: var(--mil-print);
+  --retro-rust: var(--mil-hot-side);
+  --retro-rust-dark: #a8502b;
+  --retro-gold: var(--mil-yellow);
+  --retro-line: var(--mil-line);
+  --retro-stroke: 2px;
+  --retro-recessed: var(--mil-screen);
+  --retro-recessed-strong: var(--mil-screen);
+  --retro-shadow: var(--mil-float-shadow);
+  --retro-density-space: 1;
+  --retro-paper-texture-layer: var(--mil-speck);
+  color-scheme: light;
+}
+
+:root.dark[data-appearance-mode="millennium"],
+:root.dark[data-appearance-mode="millennium"][data-accent] {
+  --mil-shell: #2f2c28;
+  --mil-panel: #3a3631;
+  --mil-hi: #4a453f;
+  --mil-lo: #2a2723;
+  --mil-drop: #1d1b18;
+  --mil-line: #171513;
+  --mil-ink: #ebe4d2;
+  --mil-print: #b5ad9a;
+  --mil-vent: #1d1b18;
+  --mil-screen: #1e221e;
+  --mil-screen-ink: #e8e2cf;
+  --mil-screen-dim: #a8a290;
+  --mil-screen-shade: rgb(0 0 0 / 0.4);
+  --mil-screen-grid: rgb(255 255 255 / 0.03);
+  --mil-rule: #3c423b;
+  --mil-key: #4d4841;
+  --mil-key-side: #2e2b27;
+  --mil-key-hi: #5d574f;
+  --mil-key-hover: #58524a;
+  --mil-on-ink: #1f2a20;
+  --mil-accent-text: #8fd6a0;
+  --mil-hot-ink: #2a1c14;
+  --mil-meter: #8fd6a0;
+  --mil-meter-track: rgb(255 255 255 / 0.12);
+  --mil-plate: #ebe4d2;
+  --mil-plate-ink: #2f2c28;
+  --mil-veil: rgb(0 0 0 / 0.55);
+  --mil-float-shadow: rgb(0 0 0 / 0.45);
+  --mil-speck: radial-gradient(rgb(255 255 255 / 0.035) 1px, transparent 1px);
+
+  --muted: #332f2b;
+  --accent: #443f39;
+  --success-foreground: #1f2a20;
+  --border: #5d574f;
+  --retro-rust: var(--mil-hot);
+  --retro-rust-dark: var(--mil-hot-side);
+  color-scheme: dark;
+}
+
+/* ---------- 机壳底纹与字体 ---------- */
+
+:root[data-appearance-mode="millennium"] .retro-shell {
+  background-color: var(--mil-shell);
+  background-image: var(--mil-speck);
+  background-size: 5px 5px;
+  color: var(--mil-ink);
+}
+
+/* 未来复古的纸张颗粒和右下角斜条纹不属于这套风格 */
+:root[data-appearance-mode="millennium"] .retro-shell::before,
+:root[data-appearance-mode="millennium"] .retro-shell::after {
+  display: none;
+}
+
+:root[data-appearance-mode="millennium"] body,
+:root[data-appearance-mode="millennium"] button,
+:root[data-appearance-mode="millennium"] input,
+:root[data-appearance-mode="millennium"] select,
+:root[data-appearance-mode="millennium"] textarea {
+  font-family: var(--mil-font);
+}
+
+/* 主色是薄荷绿键面，直接当文字色在米黄底上看不清：文字统一换成深一号的绿 */
+:root[data-appearance-mode="millennium"] :where(.text-primary, .hover\:text-primary:hover) {
+  color: var(--mil-accent-text);
+}
+
+/* 统一直角；旋转中的加载圈保持原样 */
+:root[data-appearance-mode="millennium"] [class*="rounded"]:not(.animate-spin) {
+  border-radius: 0 !important;
+}
+
+:root[data-appearance-mode="millennium"] .retro-shell svg,
+:root[data-appearance-mode="millennium"] [data-slot="dialog-content"] svg {
+  stroke-linecap: square;
+  stroke-linejoin: miter;
+}
+
+/* ---------- 标题栏：机壳上沿 ---------- */
+
+:root[data-appearance-mode="millennium"] .app-titlebar {
+  background-color: var(--mil-panel);
+  background-image: var(--mil-speck);
+  background-size: 5px 5px;
+  border-bottom-color: var(--mil-line);
+  box-shadow:
+    inset 0 2px 0 var(--mil-hi),
+    0 3px 0 var(--mil-drop);
+}
+
+/* 电源指示灯：点一下切换日间 / 夜间 */
+:root[data-appearance-mode="millennium"] .app-titlebar [role="button"][aria-label^="切换主题"] {
+  background-color: var(--mil-led);
+  border: 2px solid var(--mil-line);
+  box-shadow: 0 0 0 2px var(--mil-lo);
+  height: 14px;
+  width: 14px;
+}
+
+/* 铭牌 */
+:root[data-appearance-mode="millennium"] .app-titlebar .retro-title {
+  background-color: var(--mil-plate);
+  box-shadow:
+    -1px -1px 0 1px var(--mil-lo),
+    1px 1px 0 1px var(--mil-hi);
+  color: var(--mil-plate-ink);
+  font-family: var(--mil-font);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  padding: 4px 5px 4px 9px;
+  text-transform: uppercase;
+}
+
+/* 铭牌旁的运行状态灯和版本号 */
+:root[data-appearance-mode="millennium"] .app-titlebar .size-2 {
+  outline: 2px solid var(--mil-line);
+  outline-offset: 0;
+}
+
+:root[data-appearance-mode="millennium"] .app-titlebar .font-mono {
+  color: var(--mil-print);
+  font-family: var(--mil-font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* 页签：插在机壳上沿的塑料卡片，选中的那张和下方页面连成一体 */
+:root[data-appearance-mode="millennium"] .retro-tabs.retro-folder-tabs {
+  align-items: flex-end !important;
+  gap: 4px !important;
+}
+
+:root[data-appearance-mode="millennium"] .retro-tabs.retro-folder-tabs [role="tab"][data-retro-tab-item] {
+  color: var(--mil-print) !important;
+  flex: 0 0 auto;
+  font-family: var(--mil-font);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  height: 22px;
+  margin-left: 0;
+  min-width: 88px;
+  padding: 3px 16px 0;
+}
+
+:root[data-appearance-mode="millennium"] .retro-tabs.retro-folder-tabs [role="tab"]::before {
+  background: var(--mil-key-side);
+  border: 2px solid var(--mil-line);
+  border-radius: 0;
+  /* 自己带一条底线，压在标题栏描边的位置上，避免缩放取整时露出一像素缝 */
+  bottom: -2px;
+  box-shadow: inset 2px 2px 0 var(--mil-hi);
+  transform: none;
+}
+
+:root[data-appearance-mode="millennium"] .retro-tabs.retro-folder-tabs [role="tab"]:hover::before {
+  background: var(--mil-key);
+  border-color: var(--mil-line);
+}
+
+:root[data-appearance-mode="millennium"]
+  .retro-tabs.retro-folder-tabs
+  [role="tab"][data-retro-tab-item][data-state="active"] {
+  color: var(--mil-ink) !important;
+  height: 26px;
+  padding-top: 6px;
+}
+
+:root[data-appearance-mode="millennium"]
+  .retro-tabs.retro-folder-tabs
+  [role="tab"][data-state="active"]::before {
+  background-color: var(--mil-shell);
+  background-image: var(--mil-speck);
+  background-size: 5px 5px;
+  border-bottom: 0;
+  border-color: var(--mil-line);
+  /* 盖住标题栏的描边和厚度，和页面接上 */
+  bottom: -5px;
+  box-shadow:
+    inset 0 4px 0 var(--mil-on),
+    inset 2px 0 0 var(--mil-hi),
+    inset -2px 0 0 var(--mil-lo);
+}
+
+:root[data-appearance-mode="millennium"] .retro-tabs.retro-folder-tabs [role="tab"]:focus-visible::before {
+  box-shadow: inset 0 0 0 2px var(--mil-on-side);
+}
+
+/* ---------- 键帽：按钮 ---------- */
+
+:root[data-appearance-mode="millennium"]
+  :is(
+    [data-variant="default"],
+    [data-variant="secondary"],
+    [data-variant="outline"],
+    [data-variant="destructive"]
+  ),
+:root[data-appearance-mode="millennium"] .retro-titlebar-actions [data-variant],
+:root[data-appearance-mode="millennium"] .app-window-controls button,
+:root[data-appearance-mode="millennium"] button[aria-pressed="false"] {
+  background-color: var(--mil-key);
+  border-color: transparent;
+  box-shadow: var(--mil-keycap);
+  color: var(--mil-ink);
+  font-weight: 700;
+  padding-bottom: 3px;
+  transition:
+    transform 60ms ease-out,
+    background-color 120ms ease-out;
+}
+
+:root[data-appearance-mode="millennium"]
+  :is([data-variant="secondary"], [data-variant="outline"]):not(:disabled):hover,
+:root[data-appearance-mode="millennium"] .retro-titlebar-actions [data-variant]:not(:disabled):hover,
+:root[data-appearance-mode="millennium"] .app-window-controls button:hover,
+:root[data-appearance-mode="millennium"] button[aria-pressed="false"]:not(:disabled):hover {
+  background-color: var(--mil-key-hover);
+  color: var(--mil-ink);
+}
+
+/* 主操作键是珊瑚橙 */
+:root[data-appearance-mode="millennium"] [data-variant="default"],
+:root[data-appearance-mode="millennium"]
+  .retro-titlebar-actions
+  [data-variant].bg-primary:not([aria-label="设置"]),
+:root[data-appearance-mode="millennium"] .status-hint-box [data-variant] {
+  background-color: var(--mil-hot);
+  box-shadow:
+    inset 0 0 0 2px var(--mil-line),
+    inset 0 -4px 0 var(--mil-hot-side),
+    inset 3px 3px 0 rgb(255 255 255 / 0.28);
+  color: var(--mil-hot-ink);
+}
+
+:root[data-appearance-mode="millennium"] [data-variant="destructive"],
+:root[data-appearance-mode="millennium"] .app-window-controls button[aria-label="关闭"]:hover {
+  background-color: var(--mil-danger);
+  box-shadow:
+    inset 0 0 0 2px var(--mil-line),
+    inset 0 -4px 0 var(--mil-danger-side),
+    inset 3px 3px 0 rgb(255 255 255 / 0.2);
+  color: #fff4e6;
+}
+
+:root[data-appearance-mode="millennium"]
+  :is([data-variant="default"], [data-variant="destructive"]):not(:disabled):hover,
+:root[data-appearance-mode="millennium"]
+  .retro-titlebar-actions
+  [data-variant].bg-primary:not([aria-label="设置"]):not(:disabled):hover,
+:root[data-appearance-mode="millennium"] .status-hint-box [data-variant]:not(:disabled):hover {
+  background-color: var(--mil-hot);
+  filter: brightness(1.06);
+}
+
+:root[data-appearance-mode="millennium"]
+  [data-variant="destructive"]:not(:disabled):hover {
+  background-color: var(--mil-danger);
+}
+
+/* 按下去的薄荷绿键：选中态 */
+:root[data-appearance-mode="millennium"] button[aria-pressed="true"],
+:root[data-appearance-mode="millennium"] :is(button, label).bg-primary:not([data-variant]),
+:root[data-appearance-mode="millennium"] .retro-titlebar-actions [data-variant][aria-label="设置"].bg-primary,
+:root[data-appearance-mode="millennium"]
+  .retro-titlebar-actions
+  [data-variant][aria-label="设置"].bg-primary:not(:disabled):hover {
+  background-color: var(--mil-on);
+  border-color: transparent;
+  box-shadow: var(--mil-pressed);
+  color: var(--mil-on-ink);
+  font-weight: 700;
+  padding-bottom: 0;
+}
+
+:root[data-appearance-mode="millennium"]
+  :is(
+    [data-variant="default"],
+    [data-variant="secondary"],
+    [data-variant="outline"],
+    [data-variant="destructive"]
+  ):not(:disabled):active,
+:root[data-appearance-mode="millennium"] .retro-titlebar-actions [data-variant]:not(:disabled):active,
+:root[data-appearance-mode="millennium"] .app-window-controls button:active {
+  box-shadow:
+    inset 0 0 0 2px var(--mil-line),
+    inset 0 -2px 0 rgb(0 0 0 / 0.22);
+  transform: translateY(1px);
+}
+
+:root[data-appearance-mode="millennium"] [data-variant]:focus-visible {
+  outline: 2px solid var(--mil-on-side);
+  outline-offset: 2px;
+}
+
+/* 标题栏里的键位更小，统一成一排图标键 */
+:root[data-appearance-mode="millennium"] .retro-titlebar-actions [data-variant] {
+  height: 26px;
+  min-width: 32px;
+  padding: 0 0 3px;
+}
+
+:root[data-appearance-mode="millennium"] .retro-titlebar-actions [data-variant] svg {
+  height: 15px !important;
+  width: 15px !important;
+}
+
+:root[data-appearance-mode="millennium"] .app-window-controls button {
+  height: 24px;
+  padding: 0 0 3px;
+  width: 30px;
+}
+
+/* ---------- 凸起的塑料模块 ---------- */
+
+:root[data-appearance-mode="millennium"] .retro-panel,
+:root[data-appearance-mode="millennium"] .settings-section {
+  background-color: var(--mil-panel);
+  background-image: var(--mil-speck);
+  background-size: 5px 5px;
+  border: 2px solid var(--mil-line);
+  box-shadow: var(--mil-raise);
+  color: var(--mil-ink);
+}
+
+:root[data-appearance-mode="millennium"] .retro-title {
+  font-family: var(--mil-font);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+:root[data-appearance-mode="millennium"] .retro-value {
+  color: inherit;
+  font-family: var(--mil-font);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+:root[data-appearance-mode="millennium"] .retro-rule {
+  border-top: 2px dashed var(--mil-rule);
+}
+
+/* ---------- 下沉屏幕 ---------- */
+
+:root[data-appearance-mode="millennium"] .retro-control,
+:root[data-appearance-mode="millennium"] .status-hint-box,
+:root[data-appearance-mode="millennium"] .retro-mascot-frame,
+:root[data-appearance-mode="millennium"]
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"]),
+    textarea,
+    select,
+    [role="combobox"]
+  ) {
+  background-color: var(--mil-screen);
+  background-image: var(--mil-screen-tex);
+  background-size: 3px 3px;
+  border: 2px solid var(--mil-line);
+  box-shadow: var(--mil-sunk);
+  color: var(--mil-screen-ink);
+}
+
+:root[data-appearance-mode="millennium"] .retro-control .text-muted-foreground,
+:root[data-appearance-mode="millennium"] .status-hint-box :is(p, span) {
+  color: var(--mil-screen-dim);
+}
+
+:root[data-appearance-mode="millennium"] .status-hint-box p:first-child {
+  color: var(--mil-screen-ink);
+}
+
+:root[data-appearance-mode="millennium"] :is(input, textarea)::placeholder {
+  color: var(--mil-screen-dim);
+}
+
+:root[data-appearance-mode="millennium"] :is(input, textarea, select, [role="combobox"]):focus-visible {
+  outline: 2px solid var(--mil-on-side);
+  outline-offset: 1px;
+}
+
+/* 放着键帽的那一格不是屏幕，是机壳上的一个槽位 */
+:root[data-appearance-mode="millennium"] .retro-control:has([data-variant]) {
+  background-color: transparent;
+  background-image: none;
+  border-color: var(--mil-lo);
+  box-shadow: 2px 2px 0 var(--mil-hi);
+  color: var(--mil-ink);
+}
+
+/* ---------- 浮层：弹窗、菜单 ---------- */
+
+:root[data-appearance-mode="millennium"] [data-slot="dialog-overlay"] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: var(--mil-veil);
+}
+
+:root[data-appearance-mode="millennium"] [data-slot="dialog-content"],
+:root[data-appearance-mode="millennium"] .bg-popover {
+  background-color: var(--mil-panel);
+  background-image: var(--mil-speck);
+  background-size: 5px 5px;
+  border: 2px solid var(--mil-line);
+  box-shadow: var(--mil-float);
+  color: var(--mil-ink);
+}
+
+:root[data-appearance-mode="millennium"]
+  :is([role="menuitem"], [role="option"], [role="menuitemcheckbox"], [role="menuitemradio"])[data-highlighted] {
+  background-color: var(--mil-on);
+  color: var(--mil-on-ink);
+}
+
+/* ---------- 标签页：一排键帽，选中的是按下去的绿键 ---------- */
+
+:root[data-appearance-mode="millennium"] [role="tablist"]:not(.retro-tabs) {
+  background: transparent;
+  border: 0;
+  gap: 6px;
+  padding: 0;
+}
+
+:root[data-appearance-mode="millennium"] [role="tablist"]:not(.retro-tabs) [role="tab"] {
+  background-color: var(--mil-key);
+  /* The inset keycap shadow draws the outline; a transparent CSS border
+     would leave a strip of background outside that outline. */
+  border: 0;
+  box-shadow: var(--mil-keycap);
+  color: var(--mil-ink);
+  font-weight: 700;
+  padding-bottom: 3px;
+}
+
+:root[data-appearance-mode="millennium"]
+  [role="tablist"]:not(.retro-tabs)
+  [role="tab"]:not([data-state="active"]):hover {
+  background-color: var(--mil-key-hover);
+}
+
+:root[data-appearance-mode="millennium"] [role="tablist"]:not(.retro-tabs) [role="tab"][data-state="active"] {
+  background-color: var(--mil-on);
+  box-shadow: var(--mil-pressed);
+  color: var(--mil-on-ink);
+  padding-bottom: 0;
+}
+
+/* ---------- 开关、复选框、单选 ---------- */
+
+:root[data-appearance-mode="millennium"] :is([role="switch"], [role="checkbox"], [role="radio"]) {
+  background-color: var(--mil-screen);
+  border: 2px solid var(--mil-line);
+  box-shadow: inset 2px 2px 0 var(--mil-screen-shade);
+}
+
+:root[data-appearance-mode="millennium"]
+  :is([role="switch"], [role="checkbox"])[data-state="checked"] {
+  background-color: var(--mil-on);
+  box-shadow: none;
+  color: var(--mil-on-ink);
+}
+
+:root[data-appearance-mode="millennium"] [role="switch"] > span {
+  background-color: var(--mil-key);
+  border: 2px solid var(--mil-line);
+  box-shadow: none;
+}
+
+:root[data-appearance-mode="millennium"] [role="radio"] {
+  color: var(--mil-on-side);
+}
+
+/* ---------- 进度条：分段格 ---------- */
+
+:root[data-appearance-mode="millennium"] [data-slot="progress"] {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--mil-meter-track) 0 8px,
+    transparent 8px 10px
+  );
+  min-height: 8px;
+}
+
+:root[data-appearance-mode="millennium"] [data-slot="progress-indicator"] {
+  background-color: transparent;
+  background-image: repeating-linear-gradient(90deg, var(--mil-meter) 0 8px, transparent 8px 10px);
+}
+
+:root[data-appearance-mode="millennium"]
+  [class*="progress-indicator"][class*="bg-destructive"]
+  [data-slot="progress-indicator"] {
+  background-image: repeating-linear-gradient(90deg, var(--mil-danger) 0 8px, transparent 8px 10px);
+}
+
+/* ---------- 设置页 ---------- */
+
+/* 分区卡片不叠底部厚度，避免一页里全是阴影 */
+:root[data-appearance-mode="millennium"] .settings-section {
+  box-shadow: var(--mil-bevel);
+  padding-block: 1.25rem;
+}
+
+:root[data-appearance-mode="millennium"] .settings-option-list > *,
+:root[data-appearance-mode="millennium"] .settings-option-inline {
+  border: 2px solid var(--mil-lo);
+}
+
+:root[data-appearance-mode="millennium"] .settings-option-inline > * {
+  border: 0;
+}
+
+:root[data-appearance-mode="millennium"] .settings-choice-selected {
+  border-color: var(--mil-line);
+  box-shadow: inset 4px 0 0 var(--mil-on-side);
+}
+
+/* ---------- 终端 ---------- */
+
+:root[data-appearance-mode="millennium"] .terminal-toolbar {
+  background: transparent;
+  border-bottom: 2px solid var(--mil-lo);
+  box-shadow: 0 2px 0 var(--mil-hi);
+  padding-block: 6px;
+}
+
+/* 会话是一张张卡片，选中的那张顶边有薄荷绿 */
+:root[data-appearance-mode="millennium"] .terminal-session-tab {
+  background-color: var(--mil-panel);
+  border: 2px solid var(--mil-lo);
+  box-shadow: 2px 2px 0 var(--mil-hi);
+  color: var(--mil-print);
+}
+
+:root[data-appearance-mode="millennium"] .terminal-session-tab:hover {
+  border-color: var(--mil-line);
+  color: var(--mil-ink);
+}
+
+:root[data-appearance-mode="millennium"] .terminal-session-tab[data-selected="true"] {
+  border-color: var(--mil-line);
+  box-shadow:
+    inset 0 3px 0 var(--mil-on),
+    2px 2px 0 var(--mil-hi);
+  color: var(--mil-ink);
+}
+
+:root[data-appearance-mode="millennium"] .terminal-screen {
+  border: 2px solid var(--mil-line);
+  box-shadow:
+    inset 3px 3px 0 rgb(0 0 0 / 0.35),
+    -2px -2px 0 0 var(--mil-lo),
+    2px 2px 0 0 var(--mil-hi);
+}
+
+:root[data-appearance-mode="millennium"] .terminal-statusbar {
+  background: transparent;
+  border-top: 0;
+  color: var(--mil-print);
+  font-family: var(--mil-font);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ---------- 滚动条 ---------- */
+
+:root[data-appearance-mode="millennium"] .retro-shell,
+:root[data-appearance-mode="millennium"] .retro-shell * {
+  scrollbar-color: var(--mil-drop) transparent;
+}
+
+:root[data-appearance-mode="millennium"] .retro-shell ::-webkit-scrollbar-thumb {
+  background: var(--mil-drop);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 0;
+}
+
+:root[data-appearance-mode="millennium"] .retro-shell ::-webkit-scrollbar-thumb:hover {
+  background: var(--mil-line);
+  background-clip: padding-box;
+}
+
+/* ---------- 悬浮收起态：底部三色条换成这套配色 ---------- */
+
+:root[data-appearance-mode="millennium"] .floating-glass-bars {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='6' viewBox='0 0 80 6' shape-rendering='crispEdges'%3E%3Crect x='0' y='0' width='80' height='2' fill='%238fd6a0'/%3E%3Crect x='0' y='2' width='80' height='2' fill='%23ffd84a'/%3E%3Crect x='0' y='4' width='80' height='2' fill='%23f08a5d'/%3E%3C/svg%3E");
+}
+
+/* ---------- 标题栏图标跟随键面文字色 ---------- */
+
+:root[data-appearance-mode="millennium"] .retro-titlebar-actions [data-variant] svg {
+  stroke: currentColor;
+}
+
+/* ---------- 未启动页的显示器：屏幕固定是深色示波屏 ---------- */
+
+:root[data-appearance-mode="millennium"] .retro-shell rect[fill^="url(#maibot-offline-screen"] {
+  fill: #403c37;
+}
+
+:root.dark[data-appearance-mode="millennium"] .retro-shell rect[fill^="url(#maibot-offline-screen"] {
+  fill: #151815;
+}
+
+:root[data-appearance-mode="millennium"] .retro-shell path[stroke^="var(--retro-paper-soft"] {
+  stroke: #ded7c4;
+}
+
+/* ---------- 收尾：不走 rounded 类名的圆角、带 !important 的描边 ---------- */
+
+:root[data-appearance-mode="millennium"]
+  :is(
+    .settings-section,
+    .settings-option-list > *,
+    .settings-option-inline,
+    .settings-option-inline > *,
+    .settings-negative-tabs,
+    .settings-negative-tabs [role="tab"],
+    .retro-panel,
+    .retro-control,
+    .retro-mascot-frame,
+    .retro-top-action
+  ) {
+  border-radius: 0;
+}
+
+/* “新增平台”卡片的主色描边是 !important 的工具类，用同位置的描线盖回机壳线色 */
+:root[data-appearance-mode="millennium"] .retro-panel[class*="!border-primary"] {
+  outline: 2px solid var(--mil-line);
+  outline-offset: -2px;
+}
+
+:root[data-appearance-mode="millennium"] .settings-scroll-scope::-webkit-scrollbar-thumb,
+:root[data-appearance-mode="millennium"] .settings-scroll-scope *::-webkit-scrollbar-thumb {
+  background: var(--mil-drop) !important;
+}
+
+:root[data-appearance-mode="millennium"] .settings-scroll-scope::-webkit-scrollbar-thumb:hover,
+:root[data-appearance-mode="millennium"] .settings-scroll-scope *::-webkit-scrollbar-thumb:hover {
+  background: var(--mil-line) !important;
+}

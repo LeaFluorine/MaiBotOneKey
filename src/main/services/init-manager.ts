@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { basename, delimiter, dirname, join, relative, resolve, sep } from "node:path";
 import { createGunzip, createGzip } from "node:zlib";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
+import { QQ_OFFICIAL_ADAPTER_DIRECTORY, QQ_OFFICIAL_ADAPTER_PLUGIN_ID } from "../../shared/qq-official-adapter";
 import type {
   AgreementDocument,
   AgreementDocumentId,
@@ -33,6 +34,8 @@ import type {
   QqComponentUpgradeId,
   QqComponentUpgradeResult,
   QqBackend,
+  QqProtocol,
+  QqProtocolOptions,
   RuntimePaths,
   RuntimePathKey,
   ServiceId,
@@ -822,6 +825,7 @@ const NAPCAT_ADAPTER_DIR = join("plugins", "napcat-adapter");
 const NAPCAT_ADAPTER_CONFIG_VERSION = "0.1.0";
 const NAPCAT_ADAPTER_PLUGIN_ID = "maibot-team.napcat-adapter";
 const SNOWLUMA_ADAPTER_DIR = join("plugins", "snowluma-adapter");
+const QQ_OFFICIAL_ADAPTER_DIR = join("plugins", QQ_OFFICIAL_ADAPTER_DIRECTORY);
 const SNOWLUMA_ADAPTER_CONFIG_VERSION = "1.0.0";
 const SNOWLUMA_ADAPTER_PLUGIN_ID = "maibot-team.snowluma-adapter";
 const NAPCAT_ADAPTER_HOST = "127.0.0.1";
@@ -1355,10 +1359,99 @@ export class InitManager {
     return this.getQqBackendSync();
   }
 
+  getQqProtocolSync(): QqProtocol {
+    try {
+      const stored = JSON.parse(readFileSync(this.qqBackendPath(), "utf8"));
+      if (stored.protocol === "official") return "official";
+    } catch {
+      // Existing installations use their saved QQ backend.
+    }
+    return this.getQqBackendSync();
+  }
+
+  private async saveQqProtocolSelection(protocol: QqProtocol): Promise<void> {
+    const path = this.qqBackendPath();
+    const stored = await readFile(path, "utf8").then((text) => JSON.parse(text)).catch(() => ({}));
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, `${JSON.stringify({ ...stored, protocol, updatedAt: Date.now() }, null, 2)}\n`, "utf8");
+  }
+
+  hasOfficialQqCredentials(): boolean {
+    const dir = this.findMaiBotPluginDirByManifestId(QQ_OFFICIAL_ADAPTER_PLUGIN_ID);
+    if (!dir) return false;
+    try {
+      const config = parseToml(readFileSync(join(dir, "config.toml"), "utf8"));
+      const credentials = config.qq_official as Record<string, unknown> | undefined;
+      return typeof credentials?.app_id === "string" && Boolean(credentials.app_id.trim())
+        && typeof credentials?.app_secret === "string" && Boolean(credentials.app_secret.trim());
+    } catch {
+      return false;
+    }
+  }
+
+  async setQqProtocol(protocol: QqProtocol, options: QqProtocolOptions = {}): Promise<void> {
+    await this.ensureServiceReady("maibot");
+    const officialDir = this.findMaiBotPluginDirByManifestId(QQ_OFFICIAL_ADAPTER_PLUGIN_ID);
+    if (protocol === "official" && !officialDir) throw new Error("官方 QQ 适配器文件缺失，请修复启动环境。");
+    const configs = [
+      ...(officialDir ? [{ path: join(officialDir, "config.toml"), enabled: protocol === "official" }] : []),
+      { path: this.snowlumaAdapterConfigPath(), enabled: protocol !== "official" },
+    ];
+    const backups = await Promise.all(configs.map(async (config) => ({
+      ...config,
+      content: await readFile(config.path, "utf8").catch((error) => {
+        if (error.code === "ENOENT") return undefined;
+        throw error;
+      }),
+    })));
+    // Parse every configuration before changing either adapter.
+    const updates = backups.map((config) => {
+      const document = config.content ? parseToml(config.content) : {};
+      const plugin = document.plugin;
+      if (plugin !== undefined && (typeof plugin !== "object" || Array.isArray(plugin) || plugin === null)) {
+        throw new Error(`插件配置的 plugin 字段无效: ${config.path}`);
+      }
+      document.plugin = { ...(plugin as Record<string, never> | undefined), enabled: config.enabled };
+      if (protocol === "official" && officialDir && config.path === join(officialDir, "config.toml")) {
+        const credentials = options.officialCredentials;
+        if (credentials) {
+          if (typeof credentials.appId !== "string" || typeof credentials.appSecret !== "string" || !credentials.appId.trim() || !credentials.appSecret.trim()) {
+            throw new Error("请填写 AppID 和 AppSecret 后再切换官方适配器。");
+          }
+          document.qq_official = {
+            ...(document.qq_official as Record<string, never> | undefined),
+            app_id: credentials.appId.trim(),
+            app_secret: credentials.appSecret.trim(),
+          };
+        } else if (!this.hasOfficialQqCredentials()) {
+          throw new Error("请填写 AppID 和 AppSecret 后再切换官方适配器。");
+        }
+      }
+      return { ...config, next: stringifyToml(document) };
+    });
+    try {
+      if (protocol !== "official") await this.setQqBackend(protocol, options);
+      for (const config of updates) {
+        await mkdir(dirname(config.path), { recursive: true });
+        await writeFile(config.path, config.next, "utf8");
+      }
+      await this.saveQqProtocolSelection(protocol);
+    } catch (error) {
+      for (const config of backups) {
+        if (config.content === undefined) await rm(config.path, { force: true });
+        else await writeFile(config.path, config.content, "utf8");
+      }
+      throw error;
+    }
+  }
+
   hasMessagePlatformConfigured(): boolean {
     const store = this.readMessagePlatformStore();
     const qqAccount = store?.qqAccount?.trim();
-    return Boolean(qqAccount && isDigits(qqAccount));
+    return Boolean(
+      (qqAccount && isDigits(qqAccount)) ||
+      (this.getQqBackendSync() === "snowluma" && store?.backend === "snowluma" && typeof store.configuredAt === "number"),
+    );
   }
 
   async setQqBackend(
@@ -1368,6 +1461,7 @@ export class InitManager {
     const statePath = this.qqBackendPath();
     const previousState = await readFile(statePath, "utf8").catch(() => undefined);
     const previousBackend = this.getQqBackendSync();
+    const previousProtocol = this.getQqProtocolSync();
     const connections = this.readQqBackendConnections();
     const switching = backend !== previousBackend && this.hasMessagePlatformConfigured();
     const configPath = this.snowlumaAdapterConfigPath();
@@ -1408,18 +1502,18 @@ export class InitManager {
       await mkdir(dirname(statePath), { recursive: true });
       await writeFile(
         statePath,
-        `${JSON.stringify({ version: 1, backend, connections, updatedAt: Date.now() }, null, 2)}\n`,
+        `${JSON.stringify({ version: 1, backend, protocol: previousProtocol === "official" ? "official" : backend, connections, updatedAt: Date.now() }, null, 2)}\n`,
         "utf8",
       );
       await this.ensureServiceReady("napcat");
       if (options.syncAdapters !== false) {
         const qqAccount = await this.readConfiguredQqAccount();
-        if (qqAccount) {
+        if (qqAccount || (backend === "snowluma" && this.hasMessagePlatformConfigured())) {
           const syncedPaths = await this.syncSelectedQqAdapterConfigs({
             resetInvalidConfig: options.resetInvalidAdapterConfigs,
           });
           if (syncedPaths.some((path) => samePath(path, configPath))) {
-            await this.markMessagePlatformConfigured(backend, qqAccount, backend);
+            await this.markMessagePlatformConfigured(backend, qqAccount ?? "", backend);
           }
         }
       }
@@ -1488,7 +1582,7 @@ export class InitManager {
       ...dependencyChecks,
     ];
     const isReady = checks.every((check) => check.status !== "error");
-    return { isReady, qqAccount, qqBackend, messagePlatformConfigured, checks };
+    return { isReady, qqAccount, qqBackend, qqProtocol: this.getQqProtocolSync(), qqOfficialConfigured: this.hasOfficialQqCredentials(), messagePlatformConfigured, checks };
   }
 
   async refreshDependencyChecks(): Promise<InitCheck[]> {
@@ -2510,7 +2604,7 @@ export class InitManager {
     qqBackend: QqBackend = "napcat",
     options: InitRepairOptions = {},
   ): Promise<InitState> {
-    if (!isDigits(qqAccount)) {
+    if (!(qqBackend === "snowluma" && !qqAccount) && !isDigits(qqAccount)) {
       throw new Error("QQ 号必须是纯数字");
     }
 
@@ -2545,6 +2639,7 @@ export class InitManager {
       qqAccount,
       initializedAdapterConfig ? qqBackend : undefined,
     );
+    await this.saveQqProtocolSelection(qqBackend);
     return this.getState();
   }
 
@@ -2603,12 +2698,8 @@ export class InitManager {
   }
 
   async readSnowLumaWebsocketServer(qqAccount?: string): Promise<NapcatWebsocketServerConfig | undefined> {
-    if (!qqAccount) {
-      return undefined;
-    }
-
     try {
-      const raw = await readFile(join(this.paths.snowlumaRoot, "config", `onebot_${qqAccount}.json`), "utf8");
+      const raw = await readFile(join(this.paths.snowlumaRoot, "config", qqAccount ? `onebot_${qqAccount}.json` : "onebot.json"), "utf8");
       const parsed = JSON.parse(raw) as {
         networks?: {
           wsServers?: Array<{ host?: string; port?: number; accessToken?: string }>;
@@ -2654,11 +2745,11 @@ export class InitManager {
 
   private async syncSelectedQqAdapterConfigs(options: AdapterConfigWriteOptions = {}): Promise<string[]> {
     const qqAccount = await this.readConfiguredQqAccount();
-    if (!qqAccount) {
+    const qqBackend = await this.readQqBackend();
+    if (!qqAccount && !(qqBackend === "snowluma" && this.hasMessagePlatformConfigured())) {
       return [];
     }
 
-    const qqBackend = await this.readQqBackend();
     const adapterServer = await this.readAdapterServerFromConfig("snowluma");
     let websocketServer = qqBackend === "snowluma"
       ? await this.readSnowLumaWebsocketServer(qqAccount)
@@ -2673,9 +2764,9 @@ export class InitManager {
       token: adapterServer?.token ?? this.readQqBackendConnections()[qqBackend]?.token ?? websocketServer?.token ?? createWebsocketToken(),
     };
     if (qqBackend === "snowluma") {
-      await this.createSnowLumaConfigs(qqAccount, websocketServer.token, websocketServer.port);
+      await this.createSnowLumaConfigs(qqAccount ?? "", websocketServer.token, websocketServer.port);
     } else {
-      await this.createNapCatConfigs(qqAccount, websocketServer.token, websocketServer.port);
+      await this.createNapCatConfigs(qqAccount!, websocketServer.token, websocketServer.port);
       await this.ensureNapCatWebUiConfig();
     }
 
@@ -2749,9 +2840,10 @@ export class InitManager {
 
     if (serviceId === "maibot") {
       const changedFiles = await this.ensureBundledModuleSubtree("MaiBot", ["bot.py"], {
-        excludeRelativePaths: [NAPCAT_ADAPTER_DIR, SNOWLUMA_ADAPTER_DIR],
+        excludeRelativePaths: [NAPCAT_ADAPTER_DIR, SNOWLUMA_ADAPTER_DIR, QQ_OFFICIAL_ADAPTER_DIR],
       });
       changedFiles.push(...(await this.ensureBundledMaiBotPluginSubtree(SNOWLUMA_ADAPTER_DIR, ["plugin.py"], SNOWLUMA_ADAPTER_PLUGIN_ID)));
+      changedFiles.push(...(await this.ensureBundledMaiBotPluginSubtree(QQ_OFFICIAL_ADAPTER_DIR, ["plugin.py", "settings.py", "codec.py", "_manifest.json"], QQ_OFFICIAL_ADAPTER_PLUGIN_ID)));
       const repairedConfig = await this.repairBotConfigVersionInfo();
       return [...changedFiles, ...(repairedConfig ? [repairedConfig] : [])];
     }
@@ -3234,7 +3326,10 @@ export class InitManager {
     requiredRelativePaths: string[],
     expectedPluginId?: string,
   ): Promise<string[]> {
-    const source = join(this.paths.bundledModulesRoot, "MaiBot", pluginRelativePath);
+    const moduleSource = join(this.paths.bundledModulesRoot, "MaiBot", pluginRelativePath);
+    const source = pluginRelativePath === QQ_OFFICIAL_ADAPTER_DIR && !existsSync(moduleSource)
+      ? join(dirname(this.paths.bundledModulesRoot), "resources", "bundled-plugins", QQ_OFFICIAL_ADAPTER_DIRECTORY)
+      : moduleSource;
     const target = join(this.paths.maibotRoot, pluginRelativePath);
 
     if (!existsSync(source) || samePath(source, target)) {
@@ -4083,7 +4178,9 @@ export class InitManager {
     };
     const serialized = JSON.stringify(onebotConfig, null, 2);
     await writeFile(join(configDir, "onebot.json"), serialized, "utf8");
-    await writeFile(join(configDir, `onebot_${qqAccount}.json`), serialized, "utf8");
+    if (qqAccount) {
+      await writeFile(join(configDir, `onebot_${qqAccount}.json`), serialized, "utf8");
+    }
   }
 
   private async findNapCatWebUiFiles(): Promise<string[]> {

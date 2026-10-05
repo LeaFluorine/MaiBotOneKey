@@ -1,9 +1,10 @@
-﻿import {
+import {
   ChevronDown,
   Fish,
   FolderOpen,
   Home,
   Info,
+  MessageSquare,
   Loader2,
   Play,
   Settings,
@@ -34,7 +35,7 @@ import {
 } from "@shared/local-chat-defaults";
 import { getDesktopSnapshot, normalizeDesktopSnapshot } from "@/lib/desktop-api";
 import { localChatErrorMessage } from "@/lib/local-chat-error";
-import { useAppearance } from "@/lib/use-appearance";
+import { useAppearance, usesRetroStructure } from "@/lib/use-appearance";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -47,7 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import maiMascotImage from "@/assets/mai2.png";
-import { HomePanel } from "./HomePanel";
+import { MessagePlatformPanel } from "./MessagePlatformPanel";
 import { InitializationWizard } from "./InitializationWizard";
 import { SettingsStatusPanel } from "./SettingsStatusPanel";
 import { StartupAgreementDialog } from "./StartupAgreementDialog";
@@ -83,7 +84,7 @@ const CODEX_PET_MOTION_CONFIG: Record<CodexPetMotion, { row: number; durations: 
 const toolbarMenuItemClassName =
   "flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
 const retroTopActionIconClassName =
-  "[&_svg]:!size-6 [&_svg]:fill-none [&_svg]:stroke-[3] [&_svg]:[stroke-linecap:square] [&_svg]:[stroke-linejoin:miter]";
+  "[&_svg]:fill-none [&_svg]:stroke-[3] [&_svg]:[stroke-linecap:square] [&_svg]:[stroke-linejoin:miter]";
 const tabPageTransitionClassName =
   "absolute inset-0 min-h-0 overflow-hidden outline-none transition-transform duration-[280ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none";
 
@@ -156,7 +157,7 @@ function dependencyPreparationTitle(service: ServiceDescriptor | undefined): str
   if (service?.status === "running") {
     return "MaiBot 依赖准备完成";
   }
-  return "正在准备 MaiBot Python 环境";
+  return "正在准备 MaiBot 启动环境";
 }
 
 function DependencyMigrationCard({
@@ -186,8 +187,7 @@ function DependencyMigrationCard({
   }
 
   const progress = dependencyPreparationProgress(service, scopedLogs);
-  const detail = service?.error ?? service?.detail ?? scopedLogs.at(-1)?.message ?? "正在准备可写 Python 环境";
-  const recentLogs = scopedLogs.slice(-6);
+  const recentLogs = scopedLogs.slice(-8);
 
   return (
     <section
@@ -217,10 +217,7 @@ function DependencyMigrationCard({
             className={cn("mt-2", failed && "[&_[data-slot=progress-indicator]]:bg-destructive")}
             value={progress}
           />
-          <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-            {detail}
-          </p>
-          <div className="dependency-migration-log mt-3 max-h-28 space-y-1 overflow-auto rounded-md border p-2">
+          <div className="dependency-migration-log mt-3 min-h-32 max-h-40 space-y-1 overflow-auto rounded-md border p-2">
             {recentLogs.length > 0 ? (
               recentLogs.map((entry) => (
                 <p className="font-mono text-[11px] leading-relaxed text-muted-foreground" key={entry.id}>
@@ -568,30 +565,6 @@ function MaiBotWebuiStatusPanel({
             : status === "stopping"
               ? "MAIBOT 正在停止"
               : "MAIBOT 启动异常";
-  const description = pluginContext
-    ? !service || status === "stopped"
-      ? "插件页面需要连接到正在运行的 MaiBot Core。"
-      : status === "starting"
-        ? "正在启动 MaiBot Core，插件连接建立后会自动载入。"
-        : status === "running"
-          ? showWebUiUnavailable
-            ? "MaiBot Core 已运行，但插件 WebUI 入口暂时无法访问。"
-            : "插件页面正在加载，完成后会自动打开。"
-          : status === "stopping"
-            ? "MaiBot Core 正在停止，插件连接暂不可用。"
-            : "插件连接建立失败，请查看终端日志。"
-    : !service || status === "stopped"
-      ? "当前没有运行中的 Maibot 实例，信号连接未建立。"
-      : status === "starting"
-        ? "正在启动 Maibot Core，请稍等片刻。"
-        : status === "running"
-          ? showWebUiUnavailable
-            ? "服务进程已启动，但 WebUI 端口暂不可访问。"
-            : "WebUI 正在加载，完成后会自动打开。"
-          : status === "stopping"
-            ? "正在停止 Maibot Core。"
-            : "启动过程中发生异常，请查看终端日志。";
-
   return (
     <section className="relative grid h-full min-h-0 place-items-center overflow-hidden bg-transparent p-6 text-[var(--retro-ink,var(--foreground))]">
       <div className="relative z-10 flex w-full max-w-[530px] flex-col items-center text-center">
@@ -604,9 +577,6 @@ function MaiBotWebuiStatusPanel({
         <h3 className={cn(retro ? "mt-4" : "mt-0", "text-[34px] font-black leading-tight tracking-[0.02em] text-[var(--retro-ink,var(--foreground))]")}>
           {title}
         </h3>
-        <p className="mt-3 text-[15px] font-semibold text-[var(--retro-ink-soft,var(--muted-foreground))]">
-          {description}
-        </p>
 
         <div className="my-7 flex w-full items-center gap-3 text-[var(--retro-ink-soft,var(--muted-foreground))]">
           <span className="size-2.5 rounded-full bg-current opacity-70" />
@@ -614,7 +584,7 @@ function MaiBotWebuiStatusPanel({
           <span className="size-2.5 rounded-full bg-current opacity-70" />
         </div>
 
-        <div className="w-[min(500px,100%)] border-2 border-[var(--retro-line,var(--border))] bg-[var(--retro-recessed,transparent)] px-4 py-3 text-left">
+        <div className="status-hint-box w-[min(500px,100%)] border-2 border-[var(--retro-line,var(--border))] bg-[var(--retro-recessed,transparent)] px-4 py-3 text-left">
           <div className="flex items-start gap-3">
             <span className="grid size-8 shrink-0 place-items-center text-[var(--retro-ink,var(--foreground))]">
               <Info className="size-6" />
@@ -1208,8 +1178,11 @@ function moveRetroTabIndicator(list: HTMLElement | null, item: HTMLElement | nul
 
 export function DesktopShell(): React.JSX.Element {
   const [snapshot, setSnapshot] = useState<DesktopSnapshot | null>(null);
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = useState("maibot");
   const [webviewToolbarHost, setWebviewToolbarHost] = useState<HTMLDivElement | null>(null);
+  const [maibotCoreHost, setMaibotCoreHost] = useState<HTMLDivElement | null>(null);
+  const [maibotUpdateHost, setMaibotUpdateHost] = useState<HTMLDivElement | null>(null);
+  const [quickActionsHost, setQuickActionsHost] = useState<HTMLDivElement | null>(null);
   const [webuiChatIdentity, setWebuiChatIdentity] = useState<{ userId?: string; userName?: string }>(() => ({
     userId: window.localStorage.getItem(WEBUI_CHAT_USER_ID_STORAGE_KEY) ?? undefined,
     userName: window.localStorage.getItem(WEBUI_CHAT_USER_NAME_STORAGE_KEY) ?? undefined,
@@ -1223,7 +1196,7 @@ export function DesktopShell(): React.JSX.Element {
   const [floatingEdge, setFloatingEdge] = useState<"left" | "right" | null>(null);
   const retroTabsRef = useRef<HTMLDivElement | null>(null);
   const appearance = useAppearance();
-  const useRetroChrome = appearance.mode === "future-retro";
+  const useRetroChrome = usesRetroStructure(appearance.mode);
 
   const rememberWebuiIdentity = useCallback((identity: { userId?: string; userName?: string }) => {
     if (!identity.userId && !identity.userName) {
@@ -1323,14 +1296,14 @@ export function DesktopShell(): React.JSX.Element {
     qqBackendService?.name ?? (snapshot?.initState.qqBackend === "snowluma" ? "SnowLuma" : "NapCat");
   const floatingCodexPet = selectedCodexPetOption(snapshot);
   const messagePlatformConfigured = Boolean(
-    snapshot?.initState.messagePlatformConfigured && snapshot.initState.qqAccount?.trim(),
+    snapshot?.initState.messagePlatformConfigured,
   );
   const showTerminalTab = snapshot?.terminalSettings.useEmbeddedTerminal === true;
   const tabPageOrder = useMemo(
     () => [
-      "home",
       "maibot",
       ...(showTerminalTab ? ["terminal"] : []),
+      "message-platform",
       "settings",
     ],
     [showTerminalTab],
@@ -1456,7 +1429,7 @@ export function DesktopShell(): React.JSX.Element {
       return;
     }
     if (value === "terminal" && !showTerminalTab) {
-      setActiveTab("home");
+      setActiveTab("maibot");
       return;
     }
     if (value === "pluginmarket") {
@@ -1530,12 +1503,6 @@ export function DesktopShell(): React.JSX.Element {
     setActiveTab("maibot");
   }, []);
 
-  const openPluginDetail = useCallback((pluginId: string) => {
-    void pluginId;
-    setMaibotWebviewPath("/plugins");
-    setActiveTab("maibot");
-  }, []);
-
   const openTerminalSession = useCallback((sessionId: string) => {
     if (!showTerminalTab) {
       toast.error("请先在设置中启用内嵌终端");
@@ -1548,7 +1515,7 @@ export function DesktopShell(): React.JSX.Element {
 
   useEffect(() => {
     if (activeTab === "terminal" && !showTerminalTab) {
-      setActiveTab("home");
+      setActiveTab("maibot");
     }
   }, [activeTab, showTerminalTab]);
 
@@ -1618,6 +1585,7 @@ export function DesktopShell(): React.JSX.Element {
         useRetroChrome && "py-1",
       )}
     >
+    <div className="flex items-center" ref={setMaibotUpdateHost} />
     <Button
       aria-label="设置"
       className={cn(
@@ -1759,16 +1727,7 @@ export function DesktopShell(): React.JSX.Element {
       onPointerOver={handleRetroTabsPointerOver}
       ref={retroTabsRef}
     >
-      <TabsTrigger
-        data-retro-active={useRetroChrome && activeTab === "home" ? "true" : undefined}
-        data-retro-tab-item={useRetroChrome ? "true" : undefined}
-        data-retro-tab-value={useRetroChrome ? "home" : undefined}
-        value="home"
-        className={cn("gap-1.5", useRetroChrome && "px-5")}
-      >
-        {!useRetroChrome ? <Home /> : null}
-        首页
-      </TabsTrigger>
+
       <TabsTrigger
         data-retro-active={useRetroChrome && activeTab === "maibot" ? "true" : undefined}
         data-retro-tab-item={useRetroChrome ? "true" : undefined}
@@ -1799,6 +1758,16 @@ export function DesktopShell(): React.JSX.Element {
           终端
         </TabsTrigger>
       ) : null}
+      <TabsTrigger
+        data-retro-active={useRetroChrome && activeTab === "message-platform" ? "true" : undefined}
+        data-retro-tab-item={useRetroChrome ? "true" : undefined}
+        data-retro-tab-value={useRetroChrome ? "message-platform" : undefined}
+        value="message-platform"
+        className={cn("gap-1.5", useRetroChrome && "px-5")}
+      >
+        {!useRetroChrome ? <MessageSquare /> : null}
+        消息平台
+      </TabsTrigger>
     </TabsList>
   );
 
@@ -1837,10 +1806,21 @@ export function DesktopShell(): React.JSX.Element {
             className="flex min-h-0 flex-1 flex-col"
           >
           <Titlebar
+            coreHostRef={setMaibotCoreHost}
             appVersion={snapshot?.appVersion ?? "0.1.0"}
             retro={useRetroChrome}
-            navigation={useRetroChrome ? navigationTabs : undefined}
-            actions={useRetroChrome ? toolbarActions : undefined}
+            navigation={navigationTabs}
+            toolbar={(
+              <div className="ml-3 flex min-w-0 flex-1 items-center">
+                <div className={cn("min-w-0 flex-1", webviewToolbarActive ? "flex h-full items-center" : "hidden")} ref={setWebviewToolbarHost} />
+              </div>
+            )}
+            actions={(
+              <>
+                <div className="mr-1 flex shrink-0 items-center" ref={setQuickActionsHost} />
+                {toolbarActions}
+              </>
+            )}
           />
 
           {actionError ? (
@@ -1851,58 +1831,34 @@ export function DesktopShell(): React.JSX.Element {
 
           {/* Main */}
           <main className="flex min-h-0 flex-1 flex-col">
-              <div
-                className={cn(
-                  useRetroChrome
-                    ? webviewToolbarActive && maibotWebviewAvailable
-                      ? "flex h-10 shrink-0 items-stretch border-b-3 border-[var(--retro-tabbar-line)] px-4"
-                      : "hidden"
-                    : "flex h-10 shrink-0 items-center gap-3 border-b border-border px-3",
-                  "bg-card",
-                )}
-              >
-                {!useRetroChrome ? navigationTabs : null}
-                <div
-                  className={cn(
-                    webviewToolbarActive
-                      ? "ml-auto flex min-w-0 flex-1 items-center justify-end"
-                      : "hidden",
-                    useRetroChrome ? "h-full px-2 py-1" : "h-full",
-                  )}
-                  ref={setWebviewToolbarHost}
-                />
-                {!useRetroChrome ? toolbarActions : null}
-
-            </div>
-
             <div className="relative min-h-0 flex-1 overflow-hidden">
             <TabsContent
               forceMount
-              inert={activeTab !== "home"}
-              value="home"
+              inert={activeTab !== "message-platform"}
+              value="message-platform"
               className={tabPageTransitionClassName}
-              style={tabPageTransitionStyle("home", activeTab, tabPageOrder)}
+              style={tabPageTransitionStyle("message-platform", activeTab, tabPageOrder)}
             >
               {snapshot ? (
-                <HomePanel
-                  active={activeTab === "home"}
+                <MessagePlatformPanel
+                  coreToolbarTarget={maibotCoreHost}
+                  updateToolbarTarget={maibotUpdateHost}
+                  quickActionsToolbarTarget={quickActionsHost}
+                  active={activeTab === "message-platform"}
                   onEnterFloatingMode={enterFloatingMode}
                   onOpenPluginConfig={openPluginConfig}
-                  onOpenPluginDetail={openPluginDetail}
                   onOpenTerminalSession={openTerminalSession}
-                  onOpenTab={selectTab}
                   onSnapshot={setSnapshot}
                   onStartService={startService}
                   onStopService={stopService}
                   serviceActionBusy={actionBusy}
                   snapshot={snapshot}
-                  webuiChatIdentity={webuiChatIdentity}
                 />
               ) : (
                 <div className="grid h-full place-items-center text-sm text-muted-foreground">
                   <span className="flex items-center gap-2">
                     <Loader2 className="size-3.5 animate-spin" />
-                    正在读取首页状态
+                    正在读取消息平台状态
                   </span>
                 </div>
               )}
@@ -1919,6 +1875,7 @@ export function DesktopShell(): React.JSX.Element {
                 <WebviewPanel
                   active={activeTab === "maibot"}
                   onWebuiIdentity={rememberWebuiIdentity}
+                  readMaiBotAppearance
                   title="MaiBot WebUI"
                   toolbarPlacement="external"
                   toolbarTarget={webviewToolbarHost}

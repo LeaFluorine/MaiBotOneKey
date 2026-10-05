@@ -1,5 +1,6 @@
 export type ServiceId = "maibot" | "napcat";
 export type QqBackend = "napcat" | "snowluma";
+export type QqProtocol = QqBackend | "official";
 
 export type ServiceStatus =
   | "stopped"
@@ -419,9 +420,15 @@ export interface InitState {
   isReady: boolean;
   qqAccount?: string;
   qqBackend: QqBackend;
+  qqProtocol?: QqProtocol;
+  qqOfficialConfigured?: boolean;
   messagePlatformConfigured: boolean;
   checks: InitCheck[];
   repairedAt?: number;
+}
+
+export interface QqProtocolOptions extends InitRepairOptions {
+  officialCredentials?: { appId: string; appSecret: string };
 }
 
 export interface InitRepairOptions {
@@ -1428,6 +1435,7 @@ export interface DesktopBridge {
       request: BotPlatformAccountSetupRequest,
     ) => Promise<BotAccountConfigState>;
     setQqBackend: (backend: QqBackend, options?: InitRepairOptions) => Promise<InitState>;
+    setQqProtocol: (protocol: QqProtocol, options?: QqProtocolOptions) => Promise<InitState>;
     setQqAccount: (request: QqAccountSetupRequest) => Promise<InitState>;
   };
   agreements: {

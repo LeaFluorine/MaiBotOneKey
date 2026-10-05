@@ -1,14 +1,12 @@
 {
   "name": "maibot-onekey-desktop",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Electron shell for MaiBot OK.",
   "author": "![1779700604525](image/package/1779700604525.png)MotricSeven",
   "license": "GPL-3.0-only",
   "type": "module",
   "main": "out/main/index.cjs",
   "scripts": {
-    "lite:pack": "node scripts/lite/build.ts",
-    "lite:pack:dir": "node scripts/lite/build.ts --dir",
     "dev": "electron-vite dev",
     "dev:reset": "bun run scripts/dev/reset-dev-state.ts",
     "dev:fresh": "bun run dev:reset && bun run dev",
@@ -150,6 +148,11 @@
           "!napcat/versions/**/resources/app/napcat/temp/**",
           "!napcat/versions/**/resources/app/napcat/tmp/**"
         ]
+      },
+      {
+        "from": "resources/bundled-plugins/qq_official_adapter",
+        "to": "modules/MaiBot/plugins/qq_official_adapter",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc", "!config.toml", "!data/**", "!logs/**"]
       },
       {
         "from": "modules/MaiBot/plugins/snowluma-adapter",

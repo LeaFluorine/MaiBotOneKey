@@ -3,14 +3,16 @@ import {
   Loader2,
   RotateCw,
 } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useShortcut } from "@/lib/use-shortcut";
+import { parseMaiBotTheme, READ_MAIBOT_THEME_SCRIPT, rememberMaiBotTheme } from "@/lib/maibot-theme";
 
 interface WebviewPanelProps {
+  readMaiBotAppearance?: boolean;
   title: string;
   url: string;
   /** When false, this panel is hidden and shortcuts are disabled. */
@@ -19,6 +21,7 @@ interface WebviewPanelProps {
   reloadTrigger?: string | number | boolean | null;
   toolbarPlacement?: "internal" | "external";
   toolbarTarget?: HTMLElement | null;
+  toolbarActions?: ReactNode;
   showExternalToolbarMetadata?: boolean;
   /** After authentication lands on the WebUI home page, continue to this URL. */
   navigationTargetUrl?: string;
@@ -72,12 +75,14 @@ function withCacheBust(value: string, token: number): string {
 }
 
 export function WebviewPanel({
+  readMaiBotAppearance = false,
   title,
   url,
   active = true,
   reloadTrigger = null,
   toolbarPlacement = "internal",
   toolbarTarget = null,
+  toolbarActions,
   showExternalToolbarMetadata = true,
   navigationTargetUrl,
   onWebuiIdentity,
@@ -341,6 +346,28 @@ export function WebviewPanel({
     };
   }, [handleLoadUrlFailure, navigationTargetUrl, onWebuiIdentity, readLiveWebviewUrl, reloadKey, syncCurrentUrl, url]);
 
+  useEffect(() => {
+    if (!readMaiBotAppearance) return;
+    let disposed = false;
+    let reading = false;
+    const sync = async (): Promise<void> => {
+      const webview = webviewRef.current;
+      if (disposed || reading || !domReadyRef.current || failedRef.current || !webview?.executeJavaScript) return;
+      reading = true;
+      try {
+        const theme = parseMaiBotTheme(await webview.executeJavaScript(READ_MAIBOT_THEME_SCRIPT));
+        if (!disposed && theme) rememberMaiBotTheme(theme);
+      } catch {
+        // Navigation and a stopped WebUI can temporarily interrupt reading.
+      } finally {
+        reading = false;
+      }
+    };
+    void sync();
+    const timer = window.setInterval(() => void sync(), 1000);
+    return () => { disposed = true; window.clearInterval(timer); };
+  }, [readMaiBotAppearance, reloadKey, url]);
+
   const showLoading = !hasRenderedPage && (loadState === "idle" || loadState === "loading");
   const showWebview = hasRenderedPage || loadState === "ready" || loadState === "error";
   const toolbar = (
@@ -350,7 +377,6 @@ export function WebviewPanel({
       onOpenExternal={openExternal}
       onRefresh={refresh}
       showMetadata={showExternalToolbarMetadata}
-      title={title}
       url={currentUrl}
     />
   );
@@ -416,6 +442,7 @@ export function WebviewPanel({
           >
             <ExternalLink />
           </Button>
+          {toolbarActions}
         </div>
       </div>
 
@@ -454,7 +481,6 @@ function WebviewToolbar({
   onOpenExternal,
   onRefresh,
   showMetadata,
-  title,
   url,
 }: {
   embedded: boolean;
@@ -462,7 +488,6 @@ function WebviewToolbar({
   onOpenExternal: () => void;
   onRefresh: () => void;
   showMetadata: boolean;
-  title: string;
   url: string;
 }): React.JSX.Element {
   return (
@@ -475,28 +500,6 @@ function WebviewToolbar({
     >
       {showMetadata ? (
         <div className="flex min-w-0 items-center gap-2">
-          <h2 className="shrink-0 text-[12px] font-semibold">{title}</h2>
-          <Badge
-            dot
-            variant={
-              loadState === "ready"
-                ? "success"
-                : loadState === "error"
-                  ? "danger"
-                  : loadState === "loading"
-                    ? "warning"
-                    : "secondary"
-            }
-          >
-            {loadState === "ready"
-              ? "已载入"
-              : loadState === "error"
-                ? "未连接"
-                : loadState === "loading"
-                  ? "载入中"
-                  : "待载入"}
-          </Badge>
-          <span className="hidden h-3 w-px bg-border sm:block" />
           <code
             className={cn(
               "hidden min-w-0 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground sm:block",
@@ -511,7 +514,7 @@ function WebviewToolbar({
       <div className="flex shrink-0 items-center gap-1">
         <Button
           aria-label="刷新"
-          className="h-7 px-2 text-[11px]"
+          className={cn(embedded ? "h-6" : "h-7", "px-2 text-[11px]")}
           onClick={onRefresh}
           size="sm"
           title="刷新 (Mod+R)"
@@ -521,7 +524,7 @@ function WebviewToolbar({
         </Button>
         <Button
           aria-label="外部打开"
-          className="h-7 px-2 text-[11px]"
+          className={cn(embedded ? "h-6" : "h-7", "px-2 text-[11px]")}
           onClick={onOpenExternal}
           size="sm"
           title="外部浏览器打开 (Mod+Shift+O)"

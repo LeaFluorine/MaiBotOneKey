@@ -1,4 +1,4 @@
-﻿import {
+import {
   AlertTriangle,
   ChevronDown,
   CheckCircle2,
@@ -26,6 +26,7 @@
   Wrench,
 } from "lucide-react";
 import type { ComponentProps, CSSProperties } from "react";
+import { QQ_OFFICIAL_ADAPTER_PLUGIN_ID } from "@shared/qq-official-adapter";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type {
@@ -40,6 +41,7 @@ import type {
   LauncherUiSettings,
   NetworkProxySettings,
   QqBackend,
+  QqProtocol,
   RuntimePathConfig,
   RuntimePathKey,
   RuntimePathUpdate,
@@ -93,6 +95,7 @@ import {
   WINDOW_CORNER_RADIUS_MAX,
   WINDOW_CORNER_RADIUS_MIN,
   useAppearance,
+  usesRetroStructure,
   type AccentColor,
   type AppearanceApi,
   type AppearanceMode,
@@ -102,6 +105,9 @@ import {
 import { useShortcut } from "@/lib/use-shortcut";
 import { useTheme, type ThemePreference } from "@/lib/use-theme";
 import { cn } from "@/lib/utils";
+import { QqWebuiDialog } from "./QqWebuiDialog";
+import { OfficialQqCredentialsFields } from "./OfficialQqCredentialsFields";
+import { saveQqProtocol } from "@/lib/qq-protocol";
 
 interface SettingsStatusPanelProps {
   snapshot: DesktopSnapshot;
@@ -360,19 +366,21 @@ const fontOptions: Array<{ value: FontFamily; label: string; description: string
 ];
 
 const scaleOptions: Array<{ value: InterfaceScale; label: string; description: string }> = [
-  { value: "compact", label: "紧凑", description: "显示更多内容，控件和文字更小。" },
-  { value: "normal", label: "标准", description: "默认的信息密度与字号。" },
-  { value: "comfortable", label: "宽松", description: "字号更大，留白更多。" },
+  { value: "normal", label: "适中", description: "字号稍小，显示更多内容。" },
+  { value: "comfortable", label: "标准", description: "默认界面密度，字号更大，留白更多。" },
 ];
 
-const appearanceModeOptions: Array<{ value: AppearanceMode; label: string }> = [
+const appearanceModeOptions: Array<{ value: AppearanceMode | "follow-maibot"; label: string }> = [
+  { value: "follow-maibot", label: "跟随 MaiBot" },
   { value: "future-retro", label: "未来复古" },
+  { value: "millennium", label: "千禧" },
   { value: "modern", label: "现代" },
 ];
 
-const qqBackendOptions: Array<{ value: QqBackend; label: string; description: string }> = [
+const qqBackendOptions: Array<{ value: QqProtocol; label: string; description: string }> = [
   { value: "napcat", label: "NapCat", description: "使用 NapCat 启动 QQ 与 OneBot 连接，WebUI 端口 6099。" },
   { value: "snowluma", label: "SnowLuma", description: "使用 SnowLuma 注入 QQ 进程，WebUI 端口 5099，OneBot 端口 7988。" },
+  { value: "official", label: "官方 QQ 适配器", description: "直连 QQ 开放平台，在 MaiBot 中配置 AppID 和 AppSecret 并启用。" },
 ];
 
 const defaultNetworkProxySettings: NetworkProxySettings = {
@@ -669,7 +677,7 @@ function AppearanceScaleControl({ appearance }: { appearance: AppearanceApi }): 
 }
 
 function AppearanceRadiusControl({ appearance }: { appearance: AppearanceApi }): React.JSX.Element {
-  const windowCornerRadiusMin = appearance.mode === "future-retro"
+  const windowCornerRadiusMin = usesRetroStructure(appearance.mode)
     ? RETRO_WINDOW_CORNER_RADIUS_MIN
     : WINDOW_CORNER_RADIUS_MIN;
 
@@ -1036,11 +1044,15 @@ function LogLine({ entry }: { entry: LogEntry }): React.JSX.Element {
 
 export function SettingsStatusPanel({
   snapshot,
+  onOpenPluginConfig,
   onSnapshot,
 }: SettingsStatusPanelProps): React.JSX.Element {
   const theme = useTheme();
   const appearance = useAppearance();
-  const [qqBackend, setQqBackend] = useState<QqBackend>(snapshot.initState.qqBackend ?? "napcat");
+  const [qqBackend, setQqBackend] = useState<QqProtocol>(snapshot.initState.qqProtocol ?? snapshot.initState.qqBackend ?? "napcat");
+  const [snowlumaWebuiOpen, setSnowlumaWebuiOpen] = useState(false);
+  const [officialAppId, setOfficialAppId] = useState("");
+  const [officialAppSecret, setOfficialAppSecret] = useState("");
   const [qqWebuiPorts, setQqWebuiPorts] = useState<Record<QqBackend, string>>(() => ({
     napcat: readQqWebuiPort("napcat"),
     snowluma: readQqWebuiPort("snowluma"),
@@ -1152,8 +1164,8 @@ export function SettingsStatusPanel({
   }, [loadSourceSettings]);
 
   useEffect(() => {
-    setQqBackend(initState.qqBackend ?? "napcat");
-  }, [initState.qqBackend]);
+    setQqBackend(initState.qqProtocol ?? initState.qqBackend ?? "napcat");
+  }, [initState.qqBackend, initState.qqProtocol]);
 
   useEffect(() => {
     const syncClosePreference = (event?: Event): void => {
@@ -1256,7 +1268,7 @@ export function SettingsStatusPanel({
   }, [refreshSnapshot]);
 
   const saveQqBackend = useCallback(async (resetInvalidAdapterConfigs = false) => {
-    if (qqBackend !== initState.qqBackend && qqBackendSwitchBlocked) {
+    if (qqBackend !== (initState.qqProtocol ?? initState.qqBackend) && qqBackendSwitchBlocked) {
       setError("QQ 后端正在运行，请先停止后再切换 NapCat / SnowLuma。");
       return;
     }
@@ -1265,20 +1277,42 @@ export function SettingsStatusPanel({
     setAdapterResetRequest(null);
     setAdapterResetAction(null);
     try {
-      if (qqBackend !== initState.qqBackend) {
-        await window.maibotDesktop?.init.setQqBackend(qqBackend, {
-          resetInvalidAdapterConfigs,
-        });
+      if (qqBackend !== (initState.qqProtocol ?? initState.qqBackend)) {
+        if (qqBackend === "snowluma") {
+          await window.maibotDesktop?.init.setQqAccount({
+            qqAccount: "",
+            qqBackend,
+            resetInvalidAdapterConfigs,
+          });
+        } else {
+          await saveQqProtocol(qqBackend, {
+            resetInvalidAdapterConfigs,
+            officialCredentials: qqBackend === "official" && officialAppId.trim() && officialAppSecret.trim()
+              ? { appId: officialAppId, appSecret: officialAppSecret } : undefined,
+          });
+        }
       } else {
         return;
       }
+      if (qqBackend === "snowluma") {
+        await window.maibotDesktop?.init.repair();
+        await window.maibotDesktop?.services.start("napcat");
+      }
       await refreshSnapshot();
+      if (qqBackend === "snowluma") {
+        setSnowlumaWebuiOpen(true);
+      }
+      if (qqBackend === "official") {
+        setOfficialAppId("");
+        setOfficialAppSecret("");
+        toast.success("官方适配器已配置并保存");
+      }
     } catch (nextError) {
       setError(messageFromError(nextError));
     } finally {
       setBusy(null);
     }
-  }, [initState.qqBackend, qqBackend, qqBackendSwitchBlocked, refreshSnapshot]);
+  }, [initState.qqBackend, initState.qqProtocol, qqBackend, qqBackendSwitchBlocked, officialAppId, officialAppSecret, refreshSnapshot]);
 
   const upgradeQqComponents = useCallback(async () => {
     if (qqComponentsChangeBlocked) {
@@ -1751,8 +1785,9 @@ export function SettingsStatusPanel({
 
   const canSaveQqBackend =
     busy === null &&
-    qqBackend !== initState.qqBackend &&
-    !qqBackendSwitchBlocked;
+    qqBackend !== (initState.qqProtocol ?? initState.qqBackend) &&
+    !qqBackendSwitchBlocked &&
+    (qqBackend !== "official" || snapshot.initState.qqOfficialConfigured || Boolean(officialAppId.trim() && officialAppSecret.trim()));
   useShortcut("Mod+Enter", () => void saveQqBackend(), { enabled: canSaveQqBackend, allowInEditable: true });
   useShortcut("Mod+Shift+R", () => void repair(), { enabled: busy === null });
 
@@ -1871,8 +1906,8 @@ export function SettingsStatusPanel({
     <>
     <section
       className={cn(
-        "h-full overflow-auto px-6 py-6",
-        appearance.mode === "future-retro" ? "bg-transparent" : "bg-background",
+        "h-full overflow-auto px-6 py-3",
+        usesRetroStructure(appearance.mode) ? "bg-transparent" : "bg-background",
       )}
     >
       <div className="mx-auto w-full max-w-[1180px]">
@@ -1931,7 +1966,7 @@ export function SettingsStatusPanel({
             ) : null}
 
             <Tabs
-              className="space-y-4"
+              className="space-y-3"
               onValueChange={setActiveSettingsTab}
               value={activeSettingsTab}
             >
@@ -2459,15 +2494,15 @@ export function SettingsStatusPanel({
                   </div>
 
                   <RadioGroup
-                    className="settings-option-list settings-option-cols-3 grid gap-0 md:grid-cols-3"
-                    onValueChange={(value) => appearance.setMode(value as AppearanceMode)}
-                    value={appearance.mode}
+                    className="settings-option-list settings-option-cols-4 grid gap-0 md:grid-cols-4"
+                    onValueChange={(value) => value === "follow-maibot" ? appearance.setFollowMaiBot(true) : appearance.setMode(value as AppearanceMode)}
+                    value={appearance.followMaiBot ? "follow-maibot" : appearance.mode}
                   >
                     {appearanceModeOptions.map((option) => (
                       <label
                         className={cn(
                           "settings-choice flex min-w-0 cursor-pointer items-start gap-2 p-3 transition-colors",
-                          appearance.mode === option.value
+                          (appearance.followMaiBot ? "follow-maibot" : appearance.mode) === option.value
                             ? "settings-choice-selected bg-primary/10 text-foreground"
                             : "bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                         )}
@@ -2478,6 +2513,7 @@ export function SettingsStatusPanel({
                       </label>
                     ))}
                   </RadioGroup>
+                  {appearance.followMaiBot ? <p className="text-xs leading-relaxed text-muted-foreground">自动跟随 MaiBot WebUI 的风格和明暗；WebUI 未启动时保留上次外观。手动更改风格或配色将退出跟随。</p> : null}
                 </div>
 
                 <div className="settings-section grid gap-3 bg-muted/40 p-3">
@@ -2548,6 +2584,24 @@ export function SettingsStatusPanel({
                   </div>
                 ) : null}
 
+                {appearance.mode === "millennium" ? (
+                  <div className="settings-section grid gap-3 bg-muted/40 p-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                        <Palette className="size-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">千禧配置</p>
+                        <p className="text-xs text-muted-foreground">控制窗口边角和界面密度。</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <AppearanceRadiusControl appearance={appearance} />
+                      <AppearanceScaleControl appearance={appearance} />
+                    </div>
+                  </div>
+                ) : null}
+
                 {appearance.mode === "modern" ? (
                   <div className="settings-section grid gap-3 bg-muted/40 p-3">
                     <div className="flex min-w-0 items-center gap-2">
@@ -2595,8 +2649,8 @@ export function SettingsStatusPanel({
                   </div>
                   <RadioGroup
                     aria-label="QQ 后端"
-                    className="settings-option-list settings-option-inline grid w-full shrink-0 grid-cols-2 gap-0 bg-card sm:w-[320px]"
-                    onValueChange={(value) => setQqBackend(value as QqBackend)}
+                    className="settings-option-list settings-option-inline grid w-full shrink-0 grid-cols-3 gap-0 bg-card sm:w-[420px]"
+                    onValueChange={(value) => setQqBackend(value as QqProtocol)}
                     value={qqBackend}
                   >
                     {qqBackendOptions.map((option) => {
@@ -2620,6 +2674,9 @@ export function SettingsStatusPanel({
                       );
                     })}
                   </RadioGroup>
+                  {qqBackend === "official" && !snapshot.initState.qqOfficialConfigured ? (
+                    <OfficialQqCredentialsFields appId={officialAppId} appSecret={officialAppSecret} onAppIdChange={setOfficialAppId} onAppSecretChange={setOfficialAppSecret} disabled={busy !== null} />
+                  ) : null}
                   <Button disabled={!canSaveQqBackend} onClick={() => void saveQqBackend()}>
                     {busy === "qq" ? <Loader2 className="animate-spin" /> : <Save />}
                     保存后端
@@ -2630,7 +2687,7 @@ export function SettingsStatusPanel({
                     <div className="min-w-0">
                       <p className="text-sm font-medium">消息平台 WebUI 端口</p>
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        首页只会按这里保存的端口打开 NapCat / SnowLuma WebUI。
+                        消息平台页面会按这里保存的端口打开 NapCat / SnowLuma WebUI。
                       </p>
                     </div>
                     <Button
@@ -2643,7 +2700,7 @@ export function SettingsStatusPanel({
                     </Button>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {qqBackendOptions.map((option) => {
+                    {qqBackendOptions.filter((option): option is typeof option & { value: QqBackend } => option.value !== "official").map((option) => {
                       const port = qqWebuiPorts[option.value];
                       const valid = isValidPortText(port);
 
@@ -3008,6 +3065,12 @@ export function SettingsStatusPanel({
         </DialogContent>
       </Dialog>
 
+      <QqWebuiDialog
+        open={snowlumaWebuiOpen}
+        onOpenChange={setSnowlumaWebuiOpen}
+        backend="snowluma"
+        url={`http://127.0.0.1:${readQqWebuiPort("snowluma")}/`}
+      />
       <Dialog
         open={confirmLauncherSettingsResetOpen}
         onOpenChange={(next) => {
@@ -3023,7 +3086,7 @@ export function SettingsStatusPanel({
       />
       <DialogBody className="space-y-3 text-sm">
         <div className="rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-          会重置关闭行为、服务命令、运行时工具路径、依赖源、首页更新源、资源路径选择和 QQ 后端选择。完成后界面会刷新并重新进入启动引导。
+          会重置关闭行为、服务命令、运行时工具路径、依赖源、更新源、资源路径选择和 QQ 后端选择。完成后界面会刷新并重新进入启动引导。
         </div>
         {resourceMoveBlocked ? (
           <div className="rounded-md border border-warning/30 bg-warning/15 px-3 py-2 text-xs text-warning-foreground">

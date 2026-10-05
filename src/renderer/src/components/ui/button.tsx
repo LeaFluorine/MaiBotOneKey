@@ -69,6 +69,7 @@ export function Button({
   return (
     <Comp
       className={cn(buttonVariants({ variant, size, className }))}
+      data-variant={variant ?? "default"}
       data-has-label={hasTextChild(children) ? "true" : undefined}
       data-slot="button"
       {...props}

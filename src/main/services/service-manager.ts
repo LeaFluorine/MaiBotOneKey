@@ -580,7 +580,7 @@ export class ServiceManager extends EventEmitter {
 
   async startAll(): Promise<ServiceDescriptor[]> {
     await this.initManager.assertAgreementsConfirmed();
-    const serviceIds: ServiceId[] = this.initManager.hasMessagePlatformConfigured()
+    const serviceIds: ServiceId[] = this.initManager.getQqProtocolSync() !== "official" && this.initManager.hasMessagePlatformConfigured()
       ? ["napcat", "maibot"]
       : ["maibot"];
     if (!serviceIds.includes("napcat")) {
@@ -641,8 +641,11 @@ export class ServiceManager extends EventEmitter {
     if (serviceId === "maibot") {
       await this.initManager.assertAgreementsConfirmed();
     }
+    if (serviceId === "napcat" && this.initManager.getQqProtocolSync() === "official") {
+      throw new Error("当前选择的是官方 QQ 适配器，请在 MaiBot 中配置并启用。");
+    }
     if (serviceId === "napcat" && !this.initManager.hasMessagePlatformConfigured()) {
-      const message = "请先在首页配置消息平台，再启动 NapCat / SnowLuma。";
+      const message = "请先在消息平台页面完成配置，再启动 NapCat / SnowLuma。";
       this.logs.append(serviceId, "system", "start blocked: message platform is not configured");
       throw new Error(message);
     }

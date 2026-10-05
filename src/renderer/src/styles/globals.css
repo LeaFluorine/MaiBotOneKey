@@ -355,10 +355,6 @@
   --retro-paper-texture-layer: linear-gradient(var(--retro-paper-lift), var(--retro-paper-lift)), var(--retro-paper-texture);
 }
 
-:root[data-appearance-mode="future-retro"][data-scale="compact"] {
-  --retro-density-space: 0.82;
-}
-
 :root[data-appearance-mode="future-retro"][data-scale="comfortable"] {
   --retro-density-space: 1.18;
 }
@@ -900,6 +896,7 @@
   z-index: 1;
   min-width: 112px;
   padding-inline: 22px;
+  padding-block: 6px 0;
   font-size: 0.875rem;
   background: transparent !important;
 }
@@ -920,6 +917,7 @@
   content: "";
   position: absolute;
   inset: 0;
+  bottom: -1px;
   z-index: -1;
   border: 1px solid color-mix(in oklab, var(--retro-ink) 25%, transparent);
   border-bottom: 0;
@@ -977,8 +975,8 @@
 }
 
 .retro-titlebar-actions .retro-top-action svg {
-  width: 18px;
-  height: 18px;
+  width: 16px !important;
+  height: 16px !important;
 }
 
 /* ──────────────────────────────────────────────────────────
@@ -1469,6 +1467,7 @@ samp {
 .settings-section {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
+  padding-block: 1.25rem;
 }
 
 .settings-option-list {
@@ -1509,7 +1508,10 @@ samp {
 }
 
 .settings-negative-tabs [role="tab"] {
-  height: 1.5rem;
+  height: auto;
+  min-height: 1.75rem;
+  padding-block: 0.125rem;
+  line-height: 1.25;
   border-radius: 0.25rem;
 }
 
@@ -1532,7 +1534,7 @@ samp {
 }
 
 :root[data-appearance-mode="future-retro"] .settings-pair-grid > .settings-section {
-  padding-block: 1rem !important;
+  padding-block: 1.25rem !important;
 }
 
 @media (min-width: 1040px) {
@@ -1544,7 +1546,7 @@ samp {
 }
 
 :root[data-appearance-mode="future-retro"] .settings-content > .settings-section {
-  padding-block: 1rem !important;
+  padding-block: 1.25rem !important;
 }
 
 :root[data-appearance-mode="future-retro"] .settings-content > p {
@@ -1579,16 +1581,19 @@ samp {
 
 @media (min-width: 768px) {
   :root[data-appearance-mode="future-retro"] .settings-option-cols-2 > * + *,
+  :root[data-appearance-mode="future-retro"] .settings-option-cols-4 > * + *,
   :root[data-appearance-mode="future-retro"] .settings-option-cols-3 > * + * {
     border-top: 0 !important;
   }
 
   :root[data-appearance-mode="future-retro"] .settings-option-cols-2 > :nth-child(n + 3),
+  :root[data-appearance-mode="future-retro"] .settings-option-cols-4 > :nth-child(n + 5),
   :root[data-appearance-mode="future-retro"] .settings-option-cols-3 > :nth-child(n + 4) {
     border-top: 2px solid var(--retro-line, var(--border)) !important;
   }
 
   :root[data-appearance-mode="future-retro"] .settings-option-cols-2 > :nth-child(2n),
+  :root[data-appearance-mode="future-retro"] .settings-option-cols-4 > :not(:nth-child(4n + 1)),
   :root[data-appearance-mode="future-retro"] .settings-option-cols-3 > :nth-child(3n + 2),
   :root[data-appearance-mode="future-retro"] .settings-option-cols-3 > :nth-child(3n) {
     border-left: 2px solid var(--retro-line, var(--border)) !important;
@@ -1737,7 +1742,7 @@ samp {
   border: 2px solid transparent;
 }
 
-:root[data-appearance-mode="future-retro"] .floating-glass-stack {
+:root:is([data-appearance-mode="future-retro"], [data-appearance-mode="millennium"]) .floating-glass-stack {
   appearance: none;
   display: block;
   width: 80px !important;
@@ -1755,7 +1760,7 @@ samp {
   outline: 0;
 }
 
-:root[data-appearance-mode="future-retro"] .floating-glass-pane {
+:root:is([data-appearance-mode="future-retro"], [data-appearance-mode="millennium"]) .floating-glass-pane {
   position: absolute;
   left: 0;
   top: 0;
@@ -1765,7 +1770,7 @@ samp {
   background: transparent;
 }
 
-:root[data-appearance-mode="future-retro"] .floating-glass-bars {
+:root:is([data-appearance-mode="future-retro"], [data-appearance-mode="millennium"]) .floating-glass-bars {
   position: absolute;
   left: 0;
   top: 80px;
@@ -1781,7 +1786,7 @@ samp {
   background-size: 80px 6px;
 }
 
-:root[data-appearance-mode="future-retro"] .floating-collapsed-glow {
+:root:is([data-appearance-mode="future-retro"], [data-appearance-mode="millennium"]) .floating-collapsed-glow {
   display: none;
 }
 

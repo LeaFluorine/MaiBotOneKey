@@ -1,4 +1,4 @@
-﻿import {
+import {
   CheckCircle2,
   Loader2,
   MessageSquare,
@@ -49,8 +49,7 @@ type WizardStep =
   | "core"
   | "profile"
   | "webui"
-  | "localchat"
-  | "message-platform";
+  | "localchat";
 
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -452,36 +451,26 @@ export function InitializationWizard({
   }, [onOpenTab, waitForMaiBotWebUi]);
 
   const finishLocalChatGuide = useCallback(() => {
-    onOpenTab("home");
-    setStep("message-platform");
-  }, [onOpenTab]);
-
-  const finishMessagePlatformGuide = useCallback(() => {
+    onOpenTab("message-platform");
     requestMessagePlatformGuide();
     close();
-  }, [close]);
+  }, [close, onOpenTab]);
 
-  if (open && (step === "webui" || step === "localchat" || step === "message-platform")) {
+  if (open && (step === "webui" || step === "localchat")) {
     const floatingTitle =
       step === "webui"
         ? "在 WebUI 继续初始设置"
-        : step === "localchat"
-          ? "试试本地聊天"
-          : "连接 QQ 等 IM 平台";
+        : "试试本地聊天";
     const floatingDescription =
       step === "webui"
         ? "请在 WebUI 中完成基础配置，保存后点这里继续。"
-        : step === "localchat"
-          ? "已在 MaiBot 页面打开聊天。这里可以直接和本机运行中的 MaiBot 对话，用来测试角色、回复风格和插件效果。"
-          : "接下来会回到首页并打开 Message Platform 配置。配置 QQ 号和后端后，MaiBot 就可以通过 QQ 等即时通讯平台收发消息。";
+        : "已在 MaiBot 页面打开聊天。这里可以直接和本机运行中的 MaiBot 对话，用来测试角色、回复风格和插件效果。";
     const floatingAction =
-      step === "webui" ? "已完成" : step === "localchat" ? "下一步" : "打开配置";
+      step === "webui" ? "已完成" : "下一步";
     const floatingOnClick =
       step === "webui"
         ? () => void finishWebUiConfig()
-        : step === "localchat"
-          ? finishLocalChatGuide
-          : finishMessagePlatformGuide;
+        : finishLocalChatGuide;
 
     return (
       <div
@@ -570,10 +559,11 @@ export function InitializationWizard({
                   </Badge>
                 </div>
 
-                <label className="mt-4 grid gap-1.5 text-xs font-medium">
+                <div className="mt-4 flex items-end gap-3">
+                <label className="grid min-w-0 flex-1 gap-1.5 text-xs font-medium">
                   依赖源
                   <select
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                    className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm font-normal outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                     disabled={
                       !pythonDeps ||
                       sourceSaving ||
@@ -614,8 +604,8 @@ export function InitializationWizard({
                 </label>
 
                 {restartDownloadVisible ? (
-                  <div className="mt-3 flex justify-end">
                     <Button
+                      className="h-9 shrink-0"
                       disabled={
                         !pythonDeps || sourceSaving || downloadRestarting
                       }
@@ -631,8 +621,8 @@ export function InitializationWizard({
                       )}
                       {downloadRestarting ? "正在重新下载" : "重新开始下载"}
                     </Button>
-                  </div>
                 ) : null}
+                </div>
 
                 <div className="mt-4 space-y-2">
                   <Progress value={progress} />

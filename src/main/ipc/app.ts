@@ -2832,6 +2832,49 @@ export function registerAppIpc({
     },
   );
 
+  ipcMain.handle("init:setQqProtocol", async (_event, protocol: "napcat" | "snowluma" | "official", options?: import("../../shared/contracts").QqProtocolOptions): Promise<InitState> => {
+    if (!["napcat", "snowluma", "official"].includes(protocol)) throw new Error("Unsupported QQ protocol.");
+    await serviceManager.refresh();
+    const backendService = serviceManager.snapshot().find((service) => service.id === "napcat");
+    if (protocol !== initManager.getQqProtocolSync() && backendService && isRuntimeBusy(backendService)) {
+      throw new Error("请先停止当前 QQ 协议端，再切换。");
+    }
+    if (protocol === "official") {
+      const stopForSwitch = async (id: "napcat"): Promise<void> => {
+        await serviceManager.stop(id);
+        const deadline = Date.now() + 10_000;
+        while (Date.now() < deadline && serviceManager.snapshot().some((service) => service.id === id && isRuntimeBusy(service))) {
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+        if (serviceManager.snapshot().some((service) => service.id === id && isRuntimeBusy(service))) {
+          await serviceManager.kill(id);
+          const forceDeadline = Date.now() + 5_000;
+          while (Date.now() < forceDeadline && serviceManager.snapshot().some((service) => service.id === id && isRuntimeBusy(service))) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        }
+        if (serviceManager.snapshot().some((service) => service.id === id && isRuntimeBusy(service))) {
+          throw new Error("旧协议端未能停止，请稍后重试。");
+        }
+      };
+      try {
+        await stopForSwitch("napcat");
+        await initManager.setQqProtocol("official", options);
+        serviceManager.reloadRuntimePaths();
+        return await initManager.getState();
+      } finally {
+        await broadcastSnapshot();
+      }
+    }
+    await mutateQqBackendSafely(
+      protocol,
+      () => initManager.setQqProtocol(protocol, options),
+      options,
+    );
+    await broadcastSnapshot();
+    return initManager.getState();
+  });
+
   ipcMain.handle(
     "init:setQqBackend",
     async (_event, backend: QqBackend, options?: InitRepairOptions): Promise<InitState> => {
@@ -2900,7 +2943,7 @@ export function registerAppIpc({
       logStore.append(
         "desktop",
         "system",
-        `机器人 QQ 号已配置: ${request.qqAccount}`,
+        request.qqAccount ? `机器人 QQ 号已配置: ${request.qqAccount}` : "SnowLuma 消息平台已配置，QQ 号由客户端登录确定",
       );
       await broadcastSnapshot();
       return state;

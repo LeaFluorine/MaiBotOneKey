@@ -4,6 +4,7 @@ import { App } from "./App";
 import { bootstrapAppearance } from "./lib/use-appearance";
 import { bootstrapTheme } from "./lib/use-theme";
 import "./styles/globals.css";
+import "./styles/millennium.css";
 
 bootstrapTheme();
 bootstrapAppearance();

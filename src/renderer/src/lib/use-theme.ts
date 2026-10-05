@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { useAppearance } from "./use-appearance";
+import { MAIBOT_THEME_EVENT, readMaiBotTheme, type MaiBotTheme } from "./maibot-theme";
 
 export type ThemePreference = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
@@ -55,6 +57,13 @@ export interface ThemeApi {
 }
 
 export function useTheme(): ThemeApi {
+  const { followMaiBot, setFollowMaiBot } = useAppearance();
+  const [maiBotTheme, setMaiBotTheme] = useState(() => readMaiBotTheme());
+  useEffect(() => {
+    const listener = (event: Event): void => setMaiBotTheme((event as CustomEvent<MaiBotTheme>).detail);
+    window.addEventListener(MAIBOT_THEME_EVENT, listener);
+    return () => window.removeEventListener(MAIBOT_THEME_EVENT, listener);
+  }, []);
   const [preference, setPreferenceState] = useState<ThemePreference>(() => readStored());
   const [systemValue, setSystemValue] = useState<ResolvedTheme>(() => systemTheme());
 
@@ -68,7 +77,7 @@ export function useTheme(): ThemeApi {
     return () => media.removeEventListener("change", handler);
   }, []);
 
-  const resolved: ResolvedTheme = preference === "system" ? systemValue : preference;
+  const resolved: ResolvedTheme = followMaiBot && maiBotTheme ? (maiBotTheme.dark ? "dark" : "light") : preference === "system" ? systemValue : preference;
 
   useEffect(() => {
     applyClass(resolved);
@@ -86,27 +95,30 @@ export function useTheme(): ThemeApi {
   }, []);
 
   const setPreference = useCallback((next: ThemePreference) => {
+    setFollowMaiBot(false);
     setPreferenceState(next);
     persistPreference(next);
-  }, []);
+  }, [setFollowMaiBot]);
 
   const cycle = useCallback(() => {
+    setFollowMaiBot(false);
     setPreferenceState((current) => {
       const next: ThemePreference =
         current === "light" ? "dark" : current === "dark" ? "system" : "light";
       persistPreference(next);
       return next;
     });
-  }, []);
+  }, [setFollowMaiBot]);
 
   const toggle = useCallback(() => {
+    setFollowMaiBot(false);
     setPreferenceState((current) => {
       const currentResolved = resolve(current);
       const next: ThemePreference = currentResolved === "dark" ? "light" : "dark";
       persistPreference(next);
       return next;
     });
-  }, []);
+  }, [setFollowMaiBot]);
 
   return { preference, resolved, setPreference, cycle, toggle };
 }

@@ -52,6 +52,11 @@ function dirContaining(path: string, contains: string[]): Candidate {
 }
 
 const requirements: Requirement[] = [
+  ...["plugin.py", "settings.py", "codec.py", "_manifest.json", "LICENSE"].map((name) => ({
+    label: `QQ official adapter bundled plugin: ${name}`,
+    required: true,
+    candidates: [file(`resources/bundled-plugins/qq_official_adapter/${name}`)],
+  })),
   {
     label: "runtime directory",
     required: true,

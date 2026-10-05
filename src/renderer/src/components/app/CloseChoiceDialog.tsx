@@ -52,7 +52,7 @@ export function CloseChoiceDialog(): React.JSX.Element | null {
     <Dialog open={open} onOpenChange={(next) => { if (!next) cancel(); }}>
       <DialogContent size="sm" showCloseButton={false}>
         <DialogHeader
-          description={"\u53ef\u4ee5\u6700\u5c0f\u5316\u5230\u6258\u76d8\uff0c\u8ba9\u670d\u52a1\u7ee7\u7eed\u8fd0\u884c\uff1b\u4e5f\u53ef\u4ee5\u76f4\u63a5\u5173\u95ed\u5e94\u7528\u3002\u5173\u95ed\u5e94\u7528\u4f1a\u5148\u6e29\u548c\u505c\u6b62\u6258\u7ba1\u8fdb\u7a0b\uff0c\u8d85\u65f6\u540e\u518d\u5f3a\u5236\u7ed3\u675f\u3002"}
+          description="最小化到托盘可以偷偷运行；关闭应用会直接结束麦麦的生活。"
           icon={<PowerOff className="size-4" />}
           title={"\u5173\u95ed\u6216\u6700\u5c0f\u5316\u5230\u6258\u76d8\uff1f"}
           tone="danger"

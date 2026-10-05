@@ -846,7 +846,7 @@ export function TerminalPanel({
         return (
           <div
             className={[
-              "flex h-7 min-w-[154px] shrink-0 items-center justify-between gap-2 rounded-md border px-2.5 text-left transition-colors",
+              "terminal-session-tab flex h-7 min-w-[154px] shrink-0 items-center justify-between gap-2 rounded-md border px-2.5 text-left transition-colors",
               selected
                 ? "border-primary/60 bg-primary/10 text-foreground"
                 : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:bg-accent/40 hover:text-foreground",
@@ -901,7 +901,7 @@ export function TerminalPanel({
 
   return (
     <section className={cn("flex h-full min-h-0 flex-col text-foreground", retro ? "bg-transparent" : "bg-background")}>
-      <div className="flex min-h-9 shrink-0 items-center gap-3 border-b border-border bg-card px-3 py-1">
+      <div className="terminal-toolbar flex min-h-9 shrink-0 items-center gap-3 border-b border-border bg-card px-3 py-1">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto px-0.5">
           {terminalTabs}
         </div>
@@ -941,7 +941,7 @@ export function TerminalPanel({
 
       <div className="min-h-0 flex-1 overflow-hidden p-2">
         <div
-          className="relative size-full overflow-hidden rounded-md border border-border shadow-inner"
+          className="terminal-screen relative size-full overflow-hidden rounded-md border border-border shadow-inner"
           style={{ backgroundColor: XTERM_THEME.background }}
         >
           {terminalEntries.map((item) => (
@@ -960,7 +960,7 @@ export function TerminalPanel({
           ))}
         </div>
       </div>
-      <div className="flex h-6 shrink-0 items-center justify-between border-t border-border bg-card px-3 font-mono text-[10px] text-muted-foreground">
+      <div className="terminal-statusbar flex h-6 shrink-0 items-center justify-between border-t border-border bg-card px-3 font-mono text-[10px] text-muted-foreground">
         <span>{activeSession?.pid ? `pid ${activeSession.pid}` : "no pty"}</span>
         <span className="min-w-0 truncate pl-4 text-right" title={activeFooterText}>
           {activeFooterText}

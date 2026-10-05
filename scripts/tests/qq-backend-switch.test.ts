@@ -58,6 +58,41 @@ async function endpoint(paths: RuntimePaths, backend: QqBackend) {
   return { port: server.port, token: server.accessToken };
 }
 
+test("SnowLuma without a QQ account is configured even when the adapter file already exists", async () => {
+  const { paths, manager, adapterPath } = await fixture();
+  const existing = '[plugin]\nenabled = true\n[client]\nserver = "127.0.0.1"\nport = 18088\ntoken = "existing-token"\n';
+  await writeFile(adapterPath, existing);
+  expect(manager.hasMessagePlatformConfigured()).toBe(false);
+  await manager.setQqAccount("", undefined, undefined, "snowluma");
+  expect(manager.hasMessagePlatformConfigured()).toBe(true);
+  expect(await readFile(adapterPath, "utf8")).toBe(existing);
+  expect(await manager.readSnowLumaWebsocketServer()).toMatchObject({ port: 18088, token: "existing-token" });
+  const restarted = new InitManager(paths);
+  restarted.ensureServiceReady = async () => [];
+  expect(restarted.hasMessagePlatformConfigured()).toBe(true);
+  await restarted.setQqBackend("snowluma");
+  expect(restarted.hasMessagePlatformConfigured()).toBe(true);
+  expect(await restarted.readSnowLumaWebsocketServer()).toMatchObject({ port: 18088, token: "existing-token" });
+});
+
+test("SnowLuma setup without a QQ account persists its shared WS connection", async () => {
+  const { paths, manager, adapterPath } = await fixture();
+  await manager.setQqAccount("", "accountless-token", undefined, "snowluma");
+  expect(manager.hasMessagePlatformConfigured()).toBe(true);
+  expect(existsSync(join(paths.snowlumaRoot, "config", "onebot_.json"))).toBe(false);
+  const server = await manager.readSnowLumaWebsocketServer();
+  expect(server?.token).toBe("accountless-token");
+  const adapter = parse(await readFile(adapterPath, "utf8")) as any;
+  expect(adapter.client.port).toBe(server?.port);
+  expect(adapter.client.token).toBe(server?.token);
+  const restarted = new InitManager(paths);
+  restarted.ensureServiceReady = async () => [];
+  expect(restarted.hasMessagePlatformConfigured()).toBe(true);
+  await restarted.setQqBackend("snowluma");
+  expect(await restarted.readSnowLumaWebsocketServer()).toEqual(server);
+  await expect(manager.setQqAccount("", undefined, undefined, "napcat")).rejects.toThrow("QQ 号必须是纯数字");
+});
+
 for (const backend of ["napcat", "snowluma"] as const) {
   test(`first setup with ${backend} and round-trip switching use one adapter`, async () => {
     const { paths, manager, adapterPath } = await fixture();

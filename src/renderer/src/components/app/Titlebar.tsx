@@ -16,6 +16,8 @@ interface TitlebarProps {
   retro?: boolean;
   navigation?: ReactNode;
   actions?: ReactNode;
+  toolbar?: ReactNode;
+  coreHostRef?: (element: HTMLDivElement | null) => void;
 }
 
 function useWindowState(): WindowState {
@@ -81,10 +83,10 @@ function MacTrafficLights(): React.JSX.Element {
 function WinControls({ isMaximized, retro = false }: { isMaximized: boolean; retro?: boolean }): React.JSX.Element {
   const bridge = window.maibotDesktop?.window;
   const baseBtn =
-    "grid h-full w-9 place-items-center text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus:outline-none";
+    "grid h-7 w-8 place-items-center text-foreground/75 transition-colors hover:bg-accent hover:text-foreground focus:outline-none";
   return (
     <div
-      className="flex h-full items-stretch"
+      className="app-window-controls flex h-full items-center gap-1 pl-1 pr-1"
       data-app-region="no-drag"
       style={{
         paddingRight: retro
@@ -125,7 +127,7 @@ function WinControls({ isMaximized, retro = false }: { isMaximized: boolean; ret
       </button>
       <button
         aria-label="关闭"
-        className="grid h-full w-9 place-items-center text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus:outline-none"
+        className="grid h-7 w-8 place-items-center text-primary transition-colors hover:bg-primary hover:text-primary-foreground focus:outline-none"
         onClick={() => bridge?.close()}
         type="button"
       >
@@ -152,6 +154,8 @@ export function Titlebar({
   retro = false,
   navigation,
   actions,
+  toolbar,
+  coreHostRef,
 }: TitlebarProps): React.JSX.Element {
   const platform = usePlatform();
   const state = useWindowState();
@@ -187,7 +191,7 @@ export function Titlebar({
   return (
     <div
       className={cn(
-        "relative z-40 flex h-9 shrink-0 items-stretch border-b-2",
+        "app-titlebar relative z-40 flex h-9 shrink-0 items-stretch border-b-2",
         retro ? "border-[var(--retro-titlebar-line)]" : "border-border",
         "bg-card",
         !state.isFocused && "opacity-90",
@@ -234,17 +238,22 @@ export function Titlebar({
           isMac ? "justify-center px-3" : "px-1",
         )}
       >
-        <span className={cn("retro-title translate-y-[1.8px] truncate leading-none", retro ? "text-lg" : "text-base")}>
-          MaiBot OK
-        </span>
+        {coreHostRef ? (
+          <div data-app-region="no-drag" ref={coreHostRef} />
+        ) : (
+          <div className="flex flex-col gap-0.5">
+            <span className={cn("retro-title truncate leading-none", retro ? "text-lg" : "text-base")}>MaiBot OK</span>
+            <span className="retro-value text-[9px] leading-none text-primary" title="一键包版本">v{appVersion}</span>
+          </div>
+        )}
       </div>
 
       {navigation ? (
-        <div className="ml-6 min-w-0 self-end pt-1" data-app-region="no-drag">
+        <div className="ml-2 min-w-0 self-end pt-1" data-app-region="no-drag">
           {navigation}
         </div>
       ) : null}
-      {navigation ? <div className="min-w-4 flex-1" /> : null}
+      {toolbar ?? (navigation ? <div className="min-w-4 flex-1" /> : null)}
 
       {/* Right cluster */}
       {actions ? (
@@ -252,11 +261,6 @@ export function Titlebar({
           {actions}
         </div>
       ) : null}
-      <div className="flex items-center gap-1.5 px-1.5" data-app-region="no-drag">
-        <span className="retro-value hidden text-[11px] text-foreground md:inline-block">
-          v{appVersion}
-        </span>
-      </div>
 
       {!isMac ? <WinControls isMaximized={state.isMaximized} retro={retro} /> : null}
     </div>

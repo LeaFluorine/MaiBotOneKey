@@ -10,6 +10,8 @@
 - 两类结构分支：现代结构、未来复古结构
 - 三套视觉结果：未来复古、现代、未来
 
+> 补充：现在还有第四种视觉“千禧”（`millennium`）。它复用未来复古的结构分支（`usesRetroStructure(mode)` 为真），样式全部放在 `src/renderer/src/styles/millennium.css`，作用域是 `:root[data-appearance-mode="millennium"]`，并把 `--retro-*` 变量映射到自己的色板。
+
 `modern` 是默认地基。基础 UI 组件应保持现代风格，不要直接写成复古样式。
 
 `future` 复用现代结构，只额外开启液态玻璃层和透明 token。

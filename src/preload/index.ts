@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { QqProtocol, QqProtocolOptions } from "../shared/contracts";
 import type {
   BotAccountConfigState,
   BotPlatformAccountSetupRequest,
@@ -174,6 +175,8 @@ const desktopBridge: DesktopBridge = {
       ipcRenderer.invoke("init:setBotPlatformAccount", request) as Promise<BotAccountConfigState>,
     setQqBackend: (backend: QqBackend, options?: InitRepairOptions) =>
       ipcRenderer.invoke("init:setQqBackend", backend, options) as Promise<InitState>,
+    setQqProtocol: (protocol: QqProtocol, options?: QqProtocolOptions) =>
+      ipcRenderer.invoke("init:setQqProtocol", protocol, options) as Promise<InitState>,
     setQqAccount: (request: QqAccountSetupRequest) =>
       ipcRenderer.invoke("init:setQqAccount", request) as Promise<InitState>,
   },

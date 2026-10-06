@@ -182,7 +182,7 @@
       "target": "nsis",
       "icon": "resources/icon.ico",
       "requestedExecutionLevel": "asInvoker",
-      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+      "artifactName": "MaiBot-OK-${version}-win.${ext}",
       "extraResources": [
         {
           "from": "modules/napcat",

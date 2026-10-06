@@ -18,7 +18,7 @@ async function buildVariant(variant: "standard" | "snowluma"): Promise<void> {
   if (!existsSync(join(pythonRoot, "python.exe"))) throw new Error("Missing Python runtime: " + pythonRoot);
   const output = join(root, "release", variant);
   const configPath = join(root, ".codex-tmp", "electron-builder-" + variant + ".json");
-  const artifactName = "MaiBot-OK-" + version + "-win-" + variant + ".exe";
+  const artifactName = "MaiBot-OK-" + version + "-win" + (variant === "snowluma" ? "-snowluma" : "") + ".exe";
   await mkdir(join(root, ".codex-tmp"), { recursive: true });
   await mkdir(join(root, "release"), { recursive: true });
   await writeFile(configPath, JSON.stringify({
@@ -37,10 +37,11 @@ async function buildVariant(variant: "standard" | "snowluma"): Promise<void> {
     for (const suffix of ["", ".blockmap"]) {
       await copyFile(join(output, artifactName + suffix), join(root, "release", artifactName + suffix));
     }
-    await copyFile(join(output, "latest.yml"), join(root, "release", "latest-win-" + variant + ".yml"));
     if (variant === "standard") {
       await copyFile(join(output, "latest.yml"), join(root, "release", "latest.yml"));
       await copyFile(join(output, "latest.yml"), join(root, "release", "latest-win.yml"));
+    } else {
+      await copyFile(join(output, "latest.yml"), join(root, "release", "latest-win-snowluma.yml"));
     }
   } finally {
     await rm(configPath, { force: true });

@@ -3,7 +3,7 @@
 ## 0.6.0 - 2026-10-03
 
 - 新增“千禧”外观：沿用 MaiBot WebUI 千禧风格的米黄机壳、下沉屏幕和键帽，支持日间与夜间。
-- Windows 默认同时构建标准包（干净 Python）和完整包（预装 MaiBot 依赖），工程分别保留两个 Python 环境；保留单独构建不含 NapCat 的 SnowLuma 版命令。
+- Windows 默认构建标准包（干净 Python），应用依赖在首次初始化时安装；保留单独构建不含 NapCat 的 SnowLuma 版命令。
 - 未来复古外观将页面标签和工具按钮整合到标题栏，标签采用扁平、重叠的文件夹样式与硬阴影。
 - “聊聊”统一在 MaiBot 页面打开，点击 MaiBot 标签回到 WebUI 首页。
 - 正式版 MaiBot 更新使用最新已发布的正式 Release Tag，更新说明读取对应 Release，Dev 更新继续跟随 dev 分支；允许从同版本分支切换到正式 Tag。

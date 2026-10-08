@@ -39,8 +39,9 @@ export function QqWebuiDialog({ open, onOpenChange, backend, url }: QqWebuiDialo
             <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-xs leading-5">
               <li>登录需要连接麦麦的 QQ 账号</li>
               <li>
-                进入 <strong className="text-primary">进程注入</strong> 页面，选择对应 QQ 并点击 <strong className="text-primary">加载</strong>
+                已配置机器人 QQ 号时会自动检测并注入，QQ 后续启动或重启也会继续检测。
               </li>
+              <li>若自动注入失败，可进入 <strong className="text-primary">进程注入</strong> 页面查看状态或手动 <strong className="text-primary">加载</strong>。</li>
             </ol>
           </section>
         ) : null}

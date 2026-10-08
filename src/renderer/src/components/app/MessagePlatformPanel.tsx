@@ -1768,8 +1768,8 @@ export function MessagePlatformPanel({
       }
       return;
     }
-    const qqAccount = messagePlatformBackend === "napcat" ? messagePlatformAccount.trim() : "";
-    if (messagePlatformBackend === "napcat" && !/^\d+$/u.test(qqAccount)) {
+    const qqAccount = messagePlatformAccount.trim();
+    if (!/^\d+$/u.test(qqAccount) || qqAccount === "0") {
       setError("请输入正确的 QQ 号");
       return;
     }
@@ -1825,9 +1825,9 @@ export function MessagePlatformPanel({
       setMessagePlatformDialogOpen(true);
       return;
     }
-    if (selectedProtocol === "napcat" && (!snapshot.initState.messagePlatformConfigured || !/^\d+$/u.test(snapshot.initState.qqAccount?.trim() ?? ""))) {
+    if (selectedProtocol !== "official" && (!snapshot.initState.messagePlatformConfigured || !/^\d+$/u.test(snapshot.initState.qqAccount?.trim() ?? "") || snapshot.initState.qqAccount?.trim() === "0")) {
       setPendingProtocolSwitch(currentProtocol);
-      setMessagePlatformBackend("napcat");
+      setMessagePlatformBackend(selectedProtocol);
       setMessagePlatformAccount(snapshot.initState.qqAccount ?? "");
       setError(null);
       setAdapterResetRequest(null);
@@ -1838,7 +1838,7 @@ export function MessagePlatformPanel({
     setError(null);
     try {
       if (selectedProtocol === "snowluma") {
-        await window.maibotDesktop.init.setQqAccount({ qqAccount: "", qqBackend: "snowluma" });
+        await window.maibotDesktop.init.setQqAccount({ qqAccount: snapshot.initState.qqAccount!.trim(), qqBackend: "snowluma" });
         await window.maibotDesktop.init.repair();
         await window.maibotDesktop.services.start("napcat");
         setQqWebuiPort(readQqWebuiPort("snowluma"));
@@ -2180,7 +2180,7 @@ export function MessagePlatformPanel({
                 </button>
               ))}
             </div>
-            {messagePlatformBackend === "napcat" ? <label className="grid gap-1.5 text-xs font-medium">
+            {messagePlatformBackend !== "official" ? <label className="grid gap-1.5 text-xs font-medium">
               机器人 QQ 号
               <Input
                 disabled={busy === "message-platform:setup"}
@@ -2190,6 +2190,7 @@ export function MessagePlatformPanel({
                 placeholder="例如 123456789"
                 value={messagePlatformAccount}
               />
+              {messagePlatformBackend === "snowluma" ? <span className="font-normal text-muted-foreground">请先在 QQ 客户端登录此账号。SnowLuma 会持续检测并只自动注入此账号，QQ 后续启动或重启也会检测。</span> : null}
             </label> : null}
             {messagePlatformBackend === "official" ? (
               <OfficialQqCredentialsFields appId={officialAppId} appSecret={officialAppSecret} onAppIdChange={setOfficialAppId} onAppSecretChange={setOfficialAppSecret} disabled={busy === "message-platform:setup"} />
@@ -2241,7 +2242,7 @@ export function MessagePlatformPanel({
               取消
             </Button>
             <Button
-              disabled={busy === "message-platform:setup" || qqBackendBusy || (messagePlatformBackend === "napcat" && !messagePlatformAccount.trim()) || (messagePlatformBackend === "official" && (!officialAppId.trim() || !officialAppSecret.trim()))}
+              disabled={busy === "message-platform:setup" || qqBackendBusy || (messagePlatformBackend !== "official" && !messagePlatformAccount.trim()) || (messagePlatformBackend === "official" && (!officialAppId.trim() || !officialAppSecret.trim()))}
               onClick={() => void setupMessagePlatform()}
               size="sm"
             >

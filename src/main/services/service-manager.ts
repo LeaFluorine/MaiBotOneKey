@@ -29,6 +29,7 @@ import { InitManager } from "./init-manager";
 import { LogStore } from "./log-store";
 import { PythonDependencyManager } from "./python-dependency-manager";
 import { SnowLumaWebuiAuth } from "./snowluma-webui-auth";
+import { prepareSnowLumaEntry } from "./snowluma-auto-inject";
 
 interface ServiceDefinition {
   id: ServiceId;
@@ -1187,7 +1188,11 @@ export class ServiceManager extends EventEmitter {
         },
         buildDefaultCommand: async () => {
           if (qqBackend === "snowluma") {
-            return existsSync(snowlumaNode) ? [snowlumaNode, snowlumaEntry] : ["node", snowlumaEntry];
+            const account = await this.initManager.readSnowLumaTargetQqAccount();
+            if (!account) throw new Error("请先在消息平台配置中填写机器人 QQ 号，再启动 SnowLuma。");
+            const entry = await prepareSnowLumaEntry(snowlumaRoot, account);
+            this.logs.append("napcat", "system", `SnowLuma 将持续检测并自动注入 QQ ${account}，其他 QQ 不会自动注入。`);
+            return [existsSync(snowlumaNode) ? snowlumaNode : "node", entry];
           }
           const qq = await this.initManager.readQqAccount();
           await this.initManager.ensureNapCatWebUiConfig();

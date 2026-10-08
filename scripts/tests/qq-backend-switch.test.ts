@@ -58,41 +58,25 @@ async function endpoint(paths: RuntimePaths, backend: QqBackend) {
   return { port: server.port, token: server.accessToken };
 }
 
-test("SnowLuma without a QQ account is configured even when the adapter file already exists", async () => {
-  const { paths, manager, adapterPath } = await fixture();
-  const existing = '[plugin]\nenabled = true\n[client]\nserver = "127.0.0.1"\nport = 18088\ntoken = "existing-token"\n';
-  await writeFile(adapterPath, existing);
-  expect(manager.hasMessagePlatformConfigured()).toBe(false);
-  await manager.setQqAccount("", undefined, undefined, "snowluma");
-  expect(manager.hasMessagePlatformConfigured()).toBe(true);
-  expect(await readFile(adapterPath, "utf8")).toBe(existing);
-  expect(await manager.readSnowLumaWebsocketServer()).toMatchObject({ port: 18088, token: "existing-token" });
-  const restarted = new InitManager(paths);
-  restarted.ensureServiceReady = async () => [];
-  expect(restarted.hasMessagePlatformConfigured()).toBe(true);
-  await restarted.setQqBackend("snowluma");
-  expect(restarted.hasMessagePlatformConfigured()).toBe(true);
-  expect(await restarted.readSnowLumaWebsocketServer()).toMatchObject({ port: 18088, token: "existing-token" });
-});
+for (const backend of ["napcat", "snowluma"] as const) {
+  test(`${backend} requires a valid QQ account before changing configuration`, async () => {
+    const { manager } = await fixture();
+    const previousBackend = manager.getQqBackendSync();
+    for (const account of ["", "0", "invalid"]) {
+      await expect(manager.setQqAccount(account, undefined, undefined, backend)).rejects.toThrow("QQ 号必须是纯数字");
+    }
+    expect(manager.getQqBackendSync()).toBe(previousBackend);
+    expect(manager.hasMessagePlatformConfigured()).toBe(false);
+  });
+}
 
-test("SnowLuma setup without a QQ account persists its shared WS connection", async () => {
-  const { paths, manager, adapterPath } = await fixture();
-  await manager.setQqAccount("", "accountless-token", undefined, "snowluma");
-  expect(manager.hasMessagePlatformConfigured()).toBe(true);
-  expect(existsSync(join(paths.snowlumaRoot, "config", "onebot_.json"))).toBe(false);
-  const server = await manager.readSnowLumaWebsocketServer();
-  expect(server?.token).toBe("accountless-token");
-  const adapter = parse(await readFile(adapterPath, "utf8")) as any;
-  expect(adapter.client.port).toBe(server?.port);
-  expect(adapter.client.token).toBe(server?.token);
-  const restarted = new InitManager(paths);
-  restarted.ensureServiceReady = async () => [];
-  expect(restarted.hasMessagePlatformConfigured()).toBe(true);
-  await restarted.setQqBackend("snowluma");
-  expect(await restarted.readSnowLumaWebsocketServer()).toEqual(server);
-  await expect(manager.setQqAccount("", undefined, undefined, "napcat")).rejects.toThrow("QQ 号必须是纯数字");
+test("SnowLuma injects the setup account even when MaiBot still has a previous account", async () => {
+  const { manager } = await fixture();
+  manager.readQqAccount = async () => "111111";
+  expect(await manager.readSnowLumaTargetQqAccount()).toBe("111111");
+  await manager.setQqAccount("2814567326", undefined, undefined, "snowluma");
+  expect(await manager.readSnowLumaTargetQqAccount()).toBe("2814567326");
 });
-
 for (const backend of ["napcat", "snowluma"] as const) {
   test(`first setup with ${backend} and round-trip switching use one adapter`, async () => {
     const { paths, manager, adapterPath } = await fixture();

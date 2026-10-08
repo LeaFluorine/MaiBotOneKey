@@ -1551,8 +1551,10 @@ export class InitManager {
   }
 
   async getState(options: { refreshDependencies?: boolean } = {}): Promise<InitState> {
-    const qqAccount = await this.readConfiguredQqAccount();
     const qqBackend = await this.readQqBackend();
+    const qqAccount = qqBackend === "snowluma"
+      ? await this.readSnowLumaTargetQqAccount()
+      : await this.readConfiguredQqAccount();
     const messagePlatformConfigured = this.hasMessagePlatformConfigured();
     const dependencyChecks = options.refreshDependencies === false
       ? this.getCachedDependencyChecks()
@@ -3114,6 +3116,13 @@ export class InitManager {
       configured: Boolean(qqAccount && isDigits(qqAccount) && !UNCONFIGURED_QQ_ACCOUNTS.has(qqAccount)),
       qqAccount,
     };
+  }
+
+  async readSnowLumaTargetQqAccount(): Promise<string | undefined> {
+    // Prefer the account explicitly entered in message-platform setup over a
+    // previous MaiBot account. Older installations can still use bot config.
+    const account = this.readStoredMessagePlatformQqAccount() ?? await this.readQqAccount();
+    return account && isDigits(account) && !UNCONFIGURED_QQ_ACCOUNTS.has(account) ? account : undefined;
   }
 
   async setBotPlatformAccount(

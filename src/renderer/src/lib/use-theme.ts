@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAppearance } from "./use-appearance";
-import { MAIBOT_THEME_EVENT, readMaiBotTheme, type MaiBotTheme } from "./maibot-theme";
+import { MAIBOT_THEME_EVENT, readMaiBotTheme, resolveMaiBotTheme, type MaiBotTheme } from "./maibot-theme";
 
 export type ThemePreference = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
@@ -77,7 +77,7 @@ export function useTheme(): ThemeApi {
     return () => media.removeEventListener("change", handler);
   }, []);
 
-  const resolved: ResolvedTheme = followMaiBot && maiBotTheme ? (maiBotTheme.dark ? "dark" : "light") : preference === "system" ? systemValue : preference;
+  const resolved: ResolvedTheme = followMaiBot && maiBotTheme ? resolveMaiBotTheme(maiBotTheme, systemValue) : preference === "system" ? systemValue : preference;
 
   useEffect(() => {
     applyClass(resolved);

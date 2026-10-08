@@ -23,13 +23,12 @@ import {
   Smartphone,
   TerminalSquare,
   Trash2,
-  UserRound,
   Wrench,
 } from "lucide-react";
 import type { ComponentProps, CSSProperties } from "react";
-import { QQ_OFFICIAL_ADAPTER_PLUGIN_ID } from "@shared/qq-official-adapter";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Switch } from "radix-ui";
 import type {
   DesktopSnapshot,
   AppIconId,
@@ -41,8 +40,6 @@ import type {
   MaiBotStorageStats,
   LauncherUiSettings,
   NetworkProxySettings,
-  QqBackend,
-  QqProtocol,
   RuntimePathConfig,
   RuntimePathKey,
   RuntimePathUpdate,
@@ -87,11 +84,6 @@ import {
   type AdapterConfigResetRequest,
 } from "@/lib/adapter-config-reset";
 import {
-  isValidPortText,
-  readQqWebuiPort,
-  saveQqWebuiPort,
-} from "@/lib/qq-webui-port";
-import {
   RETRO_WINDOW_CORNER_RADIUS_MIN,
   WINDOW_CORNER_RADIUS_MAX,
   WINDOW_CORNER_RADIUS_MIN,
@@ -106,9 +98,7 @@ import {
 import { useShortcut } from "@/lib/use-shortcut";
 import { useTheme, type ThemePreference } from "@/lib/use-theme";
 import { cn } from "@/lib/utils";
-import { QqWebuiDialog } from "./QqWebuiDialog";
-import { OfficialQqCredentialsFields } from "./OfficialQqCredentialsFields";
-import { saveQqProtocol } from "@/lib/qq-protocol";
+import { settingsLogMessage, settingsLogs } from "@/lib/settings-logs";
 
 interface SettingsStatusPanelProps {
   snapshot: DesktopSnapshot;
@@ -371,17 +361,10 @@ const scaleOptions: Array<{ value: InterfaceScale; label: string; description: s
   { value: "comfortable", label: "标准", description: "默认界面密度，字号更大，留白更多。" },
 ];
 
-const appearanceModeOptions: Array<{ value: AppearanceMode | "follow-maibot"; label: string }> = [
-  { value: "follow-maibot", label: "跟随 MaiBot" },
+const appearanceModeOptions: Array<{ value: AppearanceMode; label: string }> = [
   { value: "future-retro", label: "未来复古" },
   { value: "millennium", label: "千禧" },
   { value: "modern", label: "现代" },
-];
-
-const qqBackendOptions: Array<{ value: QqProtocol; label: string; description: string }> = [
-  { value: "napcat", label: "NapCat", description: "使用 NapCat 启动 QQ 与 OneBot 连接，WebUI 端口 6099。" },
-  { value: "snowluma", label: "SnowLuma", description: "使用 SnowLuma 注入 QQ 进程，WebUI 端口 5099，OneBot 端口 7988。" },
-  { value: "official", label: "官方 QQ 适配器", description: "直连 QQ 开放平台，在 MaiBot 中配置 AppID 和 AppSecret 并启用。" },
 ];
 
 const defaultNetworkProxySettings: NetworkProxySettings = {
@@ -1022,9 +1005,10 @@ function ServiceDetail({
 }
 
 function LogLine({ entry }: { entry: LogEntry }): React.JSX.Element {
+  const message = settingsLogMessage(entry.message);
   return (
-    <div className="grid grid-cols-[74px_66px_minmax(0,1fr)] gap-2 border-b border-border px-3 py-2 font-mono text-[11px] last:border-b-0">
-      <span className="text-muted-foreground">{formatTime(entry.timestamp)}</span>
+    <div className="grid min-w-0 grid-cols-[74px_minmax(0,1fr)] gap-x-3 gap-y-1 border-b border-border px-3 py-2 font-mono text-[11px] last:border-b-0 sm:grid-cols-[74px_max-content_minmax(0,1fr)]">
+      <span className="whitespace-nowrap text-muted-foreground">{formatTime(entry.timestamp)}</span>
       <span
         className={
           entry.stream === "stderr"
@@ -1034,10 +1018,10 @@ function LogLine({ entry }: { entry: LogEntry }): React.JSX.Element {
               : "text-foreground/80"
         }
       >
-        {entry.source}/{entry.stream}
+        <span className="whitespace-nowrap">{entry.source}/{entry.stream}</span>
       </span>
-      <span className="min-w-0 truncate text-foreground/80" title={entry.message}>
-        {entry.message}
+      <span className="col-span-2 min-w-0 whitespace-pre-wrap break-words text-foreground/80 [overflow-wrap:anywhere] sm:col-span-1" title={message}>
+        {message}
       </span>
     </div>
   );
@@ -1050,14 +1034,6 @@ export function SettingsStatusPanel({
 }: SettingsStatusPanelProps): React.JSX.Element {
   const theme = useTheme();
   const appearance = useAppearance();
-  const [qqBackend, setQqBackend] = useState<QqProtocol>(snapshot.initState.qqProtocol ?? snapshot.initState.qqBackend ?? "napcat");
-  const [snowlumaWebuiOpen, setSnowlumaWebuiOpen] = useState(false);
-  const [officialAppId, setOfficialAppId] = useState("");
-  const [officialAppSecret, setOfficialAppSecret] = useState("");
-  const [qqWebuiPorts, setQqWebuiPorts] = useState<Record<QqBackend, string>>(() => ({
-    napcat: readQqWebuiPort("napcat"),
-    snowluma: readQqWebuiPort("snowluma"),
-  }));
   const [busy, setBusy] = useState<string | null>(null);
   const [miniMode, setMiniMode] = useState(false);
   useEffect(() => {
@@ -1093,8 +1069,6 @@ export function SettingsStatusPanel({
   );
   const [adapterResetRequest, setAdapterResetRequest] =
     useState<AdapterConfigResetRequest | null>(null);
-  const [adapterResetAction, setAdapterResetAction] = useState<"repair" | "qq" | null>(null);
-  const [confirmQqComponentsUpgradeOpen, setConfirmQqComponentsUpgradeOpen] = useState(false);
   const [confirmLauncherSettingsResetOpen, setConfirmLauncherSettingsResetOpen] = useState(false);
   const [confirmLauncherFullResetOpen, setConfirmLauncherFullResetOpen] = useState(false);
   const [confirmMaiBotDataResetFirstOpen, setConfirmMaiBotDataResetFirstOpen] = useState(false);
@@ -1112,7 +1086,6 @@ export function SettingsStatusPanel({
   };
   const services = snapshot.services ?? [];
   const maibotService = services.find((service) => service.id === "maibot");
-  const qqBackendService = services.find((service) => service.id === "napcat");
   const serviceCommands = snapshot.serviceCommands ?? [];
   const runtimePathConfigs = snapshot.runtimePathConfigs ?? [];
   const runtimeResourcePathConfigs = snapshot.runtimeResourcePathConfigs ?? [];
@@ -1145,36 +1118,14 @@ export function SettingsStatusPanel({
       maibotService?.status === "running" ||
       maibotService?.status === "stopping",
   );
-  const qqBackendSwitchBlocked = Boolean(
-    qqBackendService && (
-      qqBackendService.status === "starting" ||
-      qqBackendService.status === "running" ||
-      qqBackendService.status === "stopping"
-    ),
-  );
-  const qqComponentsChangeBlocked = services.some(
-    (service) =>
-      service.status === "starting" ||
-      service.status === "running" ||
-      service.status === "stopping",
-  );
   const networkProxyDirty =
     networkProxyDraft.enabled !== networkProxySettings.enabled ||
     networkProxyDraft.port !== networkProxySettings.port;
-  const qqWebuiPortsDirty =
-    qqWebuiPorts.napcat !== readQqWebuiPort("napcat") ||
-    qqWebuiPorts.snowluma !== readQqWebuiPort("snowluma");
-  const qqWebuiPortsValid =
-    isValidPortText(qqWebuiPorts.napcat) &&
-    isValidPortText(qqWebuiPorts.snowluma);
   const sourceSettingsDirty = Boolean(
     sourceSettings &&
     sourceSettingsDraft &&
     JSON.stringify(sourceSettingsDraft) !== JSON.stringify(sourceSettings),
   );
-  const selectedQqBackendOption =
-    qqBackendOptions.find((option) => option.value === qqBackend) ?? qqBackendOptions[0];
-
   useEffect(() => {
     setNetworkProxyDraft(networkProxySettings);
   }, [networkProxySettings.enabled, networkProxySettings.port]);
@@ -1190,10 +1141,6 @@ export function SettingsStatusPanel({
   useEffect(() => {
     void loadSourceSettings().catch((nextError: unknown) => setError(messageFromError(nextError)));
   }, [loadSourceSettings]);
-
-  useEffect(() => {
-    setQqBackend(initState.qqProtocol ?? initState.qqBackend ?? "napcat");
-  }, [initState.qqBackend, initState.qqProtocol]);
 
   useEffect(() => {
     const syncClosePreference = (event?: Event): void => {
@@ -1217,7 +1164,7 @@ export function SettingsStatusPanel({
     () => initState.checks.filter((check) => check.status !== "ok"),
     [initState.checks],
   );
-  const recentLogs = useMemo(() => recentLogEntries.slice(-80).reverse(), [recentLogEntries]);
+  const recentLogs = useMemo(() => settingsLogs(recentLogEntries), [recentLogEntries]);
 
   const refreshSnapshot = useCallback(async () => {
     const nextSnapshot = await window.maibotDesktop?.getSnapshot();
@@ -1237,7 +1184,6 @@ export function SettingsStatusPanel({
       const resetRequest = adapterConfigResetRequestFromError(nextError);
       if (resetRequest) {
         setAdapterResetRequest(resetRequest);
-        setAdapterResetAction("qq");
         setError(null);
       } else {
         setError(messageFromError(nextError));
@@ -1277,7 +1223,6 @@ export function SettingsStatusPanel({
     setBusy("repair");
     setError(null);
     setAdapterResetRequest(null);
-    setAdapterResetAction(null);
     try {
       await window.maibotDesktop?.init.repair({ resetInvalidAdapterConfigs });
       await refreshSnapshot();
@@ -1285,7 +1230,6 @@ export function SettingsStatusPanel({
       const resetRequest = adapterConfigResetRequestFromError(nextError);
       if (resetRequest) {
         setAdapterResetRequest(resetRequest);
-        setAdapterResetAction("repair");
         setError(null);
       } else {
         setError(messageFromError(nextError));
@@ -1294,74 +1238,6 @@ export function SettingsStatusPanel({
       setBusy(null);
     }
   }, [refreshSnapshot]);
-
-  const saveQqBackend = useCallback(async (resetInvalidAdapterConfigs = false) => {
-    if (qqBackend !== (initState.qqProtocol ?? initState.qqBackend) && qqBackendSwitchBlocked) {
-      setError("QQ 后端正在运行，请先停止后再切换 NapCat / SnowLuma。");
-      return;
-    }
-    setBusy("qq");
-    setError(null);
-    setAdapterResetRequest(null);
-    setAdapterResetAction(null);
-    try {
-      if (qqBackend !== (initState.qqProtocol ?? initState.qqBackend)) {
-        if (qqBackend === "snowluma") {
-          await window.maibotDesktop?.init.setQqAccount({
-            qqAccount: "",
-            qqBackend,
-            resetInvalidAdapterConfigs,
-          });
-        } else {
-          await saveQqProtocol(qqBackend, {
-            resetInvalidAdapterConfigs,
-            officialCredentials: qqBackend === "official" && officialAppId.trim() && officialAppSecret.trim()
-              ? { appId: officialAppId, appSecret: officialAppSecret } : undefined,
-          });
-        }
-      } else {
-        return;
-      }
-      if (qqBackend === "snowluma") {
-        await window.maibotDesktop?.init.repair();
-        await window.maibotDesktop?.services.start("napcat");
-      }
-      await refreshSnapshot();
-      if (qqBackend === "snowluma") {
-        setSnowlumaWebuiOpen(true);
-      }
-      if (qqBackend === "official") {
-        setOfficialAppId("");
-        setOfficialAppSecret("");
-        toast.success("官方适配器已配置并保存");
-      }
-    } catch (nextError) {
-      setError(messageFromError(nextError));
-    } finally {
-      setBusy(null);
-    }
-  }, [initState.qqBackend, initState.qqProtocol, qqBackend, qqBackendSwitchBlocked, officialAppId, officialAppSecret, refreshSnapshot]);
-
-  const upgradeQqComponents = useCallback(async () => {
-    if (qqComponentsChangeBlocked) {
-      setError("请先停止 MaiBot Core 和 QQ 后端，再重新安装 NapCat / SnowLuma。");
-      return;
-    }
-
-    setBusy("qq-components:upgrade");
-    setError(null);
-    try {
-      const result = await window.maibotDesktop?.init.upgradeQqComponents();
-      setConfirmQqComponentsUpgradeOpen(false);
-      const preservedCount = result?.components.reduce((total, component) => total + component.preservedEntries.length, 0) ?? 0;
-      toast.success(`NapCat / SnowLuma 已重新安装，保留 ${preservedCount} 项配置与数据`);
-      await refreshSnapshot();
-    } catch (nextError) {
-      setError(messageFromError(nextError));
-    } finally {
-      setBusy(null);
-    }
-  }, [qqComponentsChangeBlocked, refreshSnapshot]);
 
   const resetLocalStartupState = useCallback(() => {
     try {
@@ -1632,19 +1508,6 @@ export function SettingsStatusPanel({
     }
   }, [networkProxyDraft, onSnapshot, refreshSnapshot, snapshot]);
 
-  const saveQqWebuiPorts = useCallback(() => {
-    if (!qqWebuiPortsValid) {
-      setError("请填写 1-65535 之间的 NapCat / SnowLuma WebUI 端口。");
-      return;
-    }
-
-    setError(null);
-    const napcat = saveQqWebuiPort("napcat", qqWebuiPorts.napcat);
-    const snowluma = saveQqWebuiPort("snowluma", qqWebuiPorts.snowluma);
-    setQqWebuiPorts({ napcat, snowluma });
-    toast.success("消息平台 WebUI 端口已保存");
-  }, [qqWebuiPorts.napcat, qqWebuiPorts.snowluma, qqWebuiPortsValid]);
-
   const saveSourceSettings = useCallback(async () => {
     if (!sourceSettingsDraft) {
       return;
@@ -1811,12 +1674,6 @@ export function SettingsStatusPanel({
     }
   }, [refreshSnapshot]);
 
-  const canSaveQqBackend =
-    busy === null &&
-    qqBackend !== (initState.qqProtocol ?? initState.qqBackend) &&
-    !qqBackendSwitchBlocked &&
-    (qqBackend !== "official" || snapshot.initState.qqOfficialConfigured || Boolean(officialAppId.trim() && officialAppSecret.trim()));
-  useShortcut("Mod+Enter", () => void saveQqBackend(), { enabled: canSaveQqBackend, allowInEditable: true });
   useShortcut("Mod+Shift+R", () => void repair(), { enabled: busy === null });
 
   const environmentServicesPanel = (
@@ -1934,13 +1791,14 @@ export function SettingsStatusPanel({
     <>
     <section
       className={cn(
-        "h-full overflow-auto px-6 py-3",
+        "h-full px-6 py-3",
+        activeSettingsTab === "logs" ? "flex min-h-0 flex-col overflow-hidden" : "overflow-auto",
         usesRetroStructure(appearance.mode) ? "bg-transparent" : "bg-background",
       )}
     >
-      <div className="mx-auto w-full max-w-[1180px]">
-        <Card className="border-0 bg-transparent">
-          <CardContent className="space-y-4 p-0">
+      <div className={cn("mx-auto w-full max-w-[1180px]", activeSettingsTab === "logs" && "flex min-h-0 flex-1 flex-col")}>
+        <Card className={cn("border-0 bg-transparent", activeSettingsTab === "logs" && "flex min-h-0 flex-1 flex-col")}>
+          <CardContent className={cn("p-0", activeSettingsTab === "logs" ? "flex min-h-0 flex-1 flex-col gap-4" : "space-y-4")}>
             {error ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-destructive">
                 {error}
@@ -1965,11 +1823,7 @@ export function SettingsStatusPanel({
                       <Button
                         disabled={busy !== null}
                         onClick={() => {
-                          if (adapterResetAction === "repair") {
-                            void repair(true);
-                          } else {
-                            void saveQqBackend(true);
-                          }
+                          void repair(true);
                         }}
                         size="sm"
                       >
@@ -1980,7 +1834,6 @@ export function SettingsStatusPanel({
                         disabled={busy !== null}
                         onClick={() => {
                           setAdapterResetRequest(null);
-                          setAdapterResetAction(null);
                         }}
                         size="sm"
                         variant="ghost"
@@ -1994,22 +1847,22 @@ export function SettingsStatusPanel({
             ) : null}
 
             <Tabs
-              className="space-y-3"
+              className={activeSettingsTab === "logs" ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-3"}
               onValueChange={setActiveSettingsTab}
               value={activeSettingsTab}
             >
-              <TabsList className="settings-negative-tabs flex h-auto flex-wrap">
+              <TabsList className="settings-negative-tabs flex h-auto shrink-0 flex-wrap">
                 <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="general">
                   <Settings className="size-3" />
                   通用
                 </TabsTrigger>
+                <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="network">
+                  <Network className="size-3" />
+                  网络
+                </TabsTrigger>
                 <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="appearance">
                   <Palette className="size-3" />
                   外观
-                </TabsTrigger>
-                <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="account">
-                  <UserRound className="size-3" />
-                  协议端选择
                 </TabsTrigger>
                 <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="paths">
                   <ShieldCheck className="size-3" />
@@ -2115,6 +1968,91 @@ export function SettingsStatusPanel({
                 </div>
                 </div>
 
+                <div className="settings-pair-grid">
+                <div className="settings-section grid gap-3 bg-destructive/5 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-md bg-destructive/10 text-destructive">
+                        <Trash2 className="size-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">重置 MaiBot 数据</p>
+                        <p className="text-xs text-muted-foreground">
+                          清空 MaiBot Core 的 data 目录，包括数据库、记忆、日志缓存等。该操作不可恢复。
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      disabled={busy !== null || maibotDataBlocked}
+                      onClick={() => setConfirmMaiBotDataResetFirstOpen(true)}
+                      size="sm"
+                      variant="destructive"
+                    >
+                      <Trash2 className="size-4" />
+                      重置数据
+                    </Button>
+                  </div>
+                  {lastMaiBotDataReset ? (
+                    <div className="rounded-md border border-warning/40 bg-warning/15 p-3 text-[12px] text-foreground">
+                      <div className="flex items-center gap-1.5 font-medium">
+                        <AlertTriangle className="size-3.5" />
+                        最近一次重置
+                      </div>
+                      <dl className="mt-1.5 grid gap-0.5 text-muted-foreground">
+                        <div className="flex gap-2">
+                          <dt className="shrink-0">目录：</dt>
+                          <dd className="break-all">{lastMaiBotDataReset.dataDir}</dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt className="shrink-0">移除项数：</dt>
+                          <dd>{lastMaiBotDataReset.removedEntries.length}</dd>
+                        </div>
+                        <div className="flex gap-2">
+                          <dt className="shrink-0">时间：</dt>
+                          <dd>{formatTime(lastMaiBotDataReset.clearedAt)}</dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-destructive/5 p-3">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-destructive/10 text-destructive">
+                      <RotateCcw className="size-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">重置启动器</p>
+                      <p className="text-xs text-muted-foreground">
+                        清空设置会重走启动引导；完全还原会删除运行时资源目录。
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <Button
+                      disabled={busy !== null || resourceMoveBlocked}
+                      onClick={() => setConfirmLauncherSettingsResetOpen(true)}
+                      size="sm"
+                      variant="outline"
+                    >
+                      <RotateCcw className="size-4" />
+                      清空启动器设置
+                    </Button>
+                    <Button
+                      disabled={busy !== null || resourceMoveBlocked}
+                      onClick={() => setConfirmLauncherFullResetOpen(true)}
+                      size="sm"
+                      variant="destructive"
+                    >
+                      <Trash2 className="size-4" />
+                      完全还原初始状态
+                    </Button>
+                  </div>
+                </div>
+                </div>
+
+                {environmentServicesPanel}
+
                 <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
@@ -2127,15 +2065,19 @@ export function SettingsStatusPanel({
                       </p>
                     </div>
                   </div>
-                  <label className="flex h-10 shrink-0 cursor-pointer items-center gap-2 rounded-md border border-border bg-card px-3 text-sm">
-                    <Checkbox
+                  <Switch.Root
+                      aria-label="启用开发者模式"
                       checked={developerModeEnabled}
-                      onCheckedChange={(checked) => updateDeveloperMode(checked === true)}
-                    />
-                    启用开发者模式
-                  </label>
+                      className="inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-input transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=checked]:bg-primary"
+                      onCheckedChange={updateDeveloperMode}
+                  >
+                    <Switch.Thumb className="pointer-events-none block size-4 translate-x-0 rounded-full bg-background shadow-sm transition-transform data-[state=checked]:translate-x-4" />
+                  </Switch.Root>
                 </div>
 
+              </TabsContent>
+
+              <TabsContent className="settings-content" value="network">
                 <div className="settings-section grid gap-3 bg-muted/40 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
@@ -2256,92 +2198,6 @@ export function SettingsStatusPanel({
                     </div>
                   )}
                 </div>
-
-                <div className="settings-pair-grid">
-                <div className="settings-section grid gap-3 bg-destructive/5 p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="grid size-7 shrink-0 place-items-center rounded-md bg-destructive/10 text-destructive">
-                        <Trash2 className="size-4" />
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">重置 MaiBot 数据</p>
-                        <p className="text-xs text-muted-foreground">
-                          清空 MaiBot Core 的 data 目录，包括数据库、记忆、日志缓存等。该操作不可恢复。
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      disabled={busy !== null || maibotDataBlocked}
-                      onClick={() => setConfirmMaiBotDataResetFirstOpen(true)}
-                      size="sm"
-                      variant="destructive"
-                    >
-                      <Trash2 className="size-4" />
-                      重置数据
-                    </Button>
-                  </div>
-                  {lastMaiBotDataReset ? (
-                    <div className="rounded-md border border-warning/40 bg-warning/15 p-3 text-[12px] text-foreground">
-                      <div className="flex items-center gap-1.5 font-medium">
-                        <AlertTriangle className="size-3.5" />
-                        最近一次重置
-                      </div>
-                      <dl className="mt-1.5 grid gap-0.5 text-muted-foreground">
-                        <div className="flex gap-2">
-                          <dt className="shrink-0">目录：</dt>
-                          <dd className="break-all">{lastMaiBotDataReset.dataDir}</dd>
-                        </div>
-                        <div className="flex gap-2">
-                          <dt className="shrink-0">移除项数：</dt>
-                          <dd>{lastMaiBotDataReset.removedEntries.length}</dd>
-                        </div>
-                        <div className="flex gap-2">
-                          <dt className="shrink-0">时间：</dt>
-                          <dd>{formatTime(lastMaiBotDataReset.clearedAt)}</dd>
-                        </div>
-                      </dl>
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-destructive/5 p-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-destructive/10 text-destructive">
-                      <RotateCcw className="size-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">重置启动器</p>
-                      <p className="text-xs text-muted-foreground">
-                        清空设置会重走启动引导；完全还原会删除运行时资源目录。
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <Button
-                      disabled={busy !== null || resourceMoveBlocked}
-                      onClick={() => setConfirmLauncherSettingsResetOpen(true)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      <RotateCcw className="size-4" />
-                      清空启动器设置
-                    </Button>
-                    <Button
-                      disabled={busy !== null || resourceMoveBlocked}
-                      onClick={() => setConfirmLauncherFullResetOpen(true)}
-                      size="sm"
-                      variant="destructive"
-                    >
-                      <Trash2 className="size-4" />
-                      完全还原初始状态
-                    </Button>
-                  </div>
-                </div>
-                </div>
-
-                {environmentServicesPanel}
-
               </TabsContent>
 
               <TabsContent className="settings-content" value="appearance">
@@ -2514,34 +2370,47 @@ export function SettingsStatusPanel({
 
                 <div className="settings-pair-grid">
                 <div className="settings-section grid gap-3 bg-muted/40 p-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-                      <Palette className="size-4" />
-                    </span>
-                    <p className="min-w-0 text-sm font-medium">外观风格</p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
+                        <Palette className="size-4" />
+                      </span>
+                      <p className="min-w-0 text-sm font-medium">外观风格</p>
+                    </div>
+                    <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
+                      跟随 MaiBot
+                      <Switch.Root
+                        checked={appearance.followMaiBot}
+                        className="inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent bg-input transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=checked]:bg-primary"
+                        onCheckedChange={appearance.setFollowMaiBot}
+                      >
+                        <Switch.Thumb className="pointer-events-none block size-4 translate-x-0 rounded-full bg-background shadow-sm transition-transform data-[state=checked]:translate-x-4" />
+                      </Switch.Root>
+                    </label>
                   </div>
 
-                  <RadioGroup
-                    className="settings-option-list settings-option-cols-4 grid gap-0 md:grid-cols-4"
-                    onValueChange={(value) => value === "follow-maibot" ? appearance.setFollowMaiBot(true) : appearance.setMode(value as AppearanceMode)}
-                    value={appearance.followMaiBot ? "follow-maibot" : appearance.mode}
-                  >
-                    {appearanceModeOptions.map((option) => (
-                      <label
-                        className={cn(
-                          "settings-choice flex min-w-0 cursor-pointer items-start gap-2 p-3 transition-colors",
-                          (appearance.followMaiBot ? "follow-maibot" : appearance.mode) === option.value
-                            ? "settings-choice-selected bg-primary/10 text-foreground"
-                            : "bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                        )}
-                        key={option.value}
-                      >
-                        <RadioGroupItem className="mt-0.5" value={option.value} />
-                        <span className="min-w-0 text-sm font-medium">{option.label}</span>
-                      </label>
-                    ))}
-                  </RadioGroup>
-                  {appearance.followMaiBot ? <p className="text-xs leading-relaxed text-muted-foreground">自动跟随 MaiBot WebUI 的风格和明暗；WebUI 未启动时保留上次外观。手动更改风格或配色将退出跟随。</p> : null}
+                  {!appearance.followMaiBot ? (
+                    <RadioGroup
+                      className="settings-option-list settings-option-cols-3 grid gap-0 md:grid-cols-3"
+                      onValueChange={(value) => appearance.setMode(value as AppearanceMode)}
+                      value={appearance.mode}
+                    >
+                      {appearanceModeOptions.map((option) => (
+                        <label
+                          className={cn(
+                            "settings-choice flex min-w-0 cursor-pointer items-start gap-2 p-3 transition-colors",
+                            appearance.mode === option.value
+                              ? "settings-choice-selected bg-primary/10 text-foreground"
+                              : "bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                          )}
+                          key={option.value}
+                        >
+                          <RadioGroupItem className="mt-0.5" value={option.value} />
+                          <span className="min-w-0 text-sm font-medium">{option.label}</span>
+                        </label>
+                      ))}
+                    </RadioGroup>
+                  ) : null}
                 </div>
 
                 <div className="settings-section grid gap-3 bg-muted/40 p-3">
@@ -2661,121 +2530,6 @@ export function SettingsStatusPanel({
                       恢复默认外观
                     </Button>
                   </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent className="settings-content" value="account">
-                <p className="text-xs text-muted-foreground">
-                  选择当前使用的 QQ 协议端。请先停止当前协议端；切换时会记住当前端口和 token，并恢复目标协议端上次的连接配置。
-                </p>
-                <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">QQ 后端</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      {selectedQqBackendOption.description}
-                    </p>
-                  </div>
-                  <RadioGroup
-                    aria-label="QQ 后端"
-                    className="settings-option-list settings-option-inline grid w-full shrink-0 grid-cols-3 gap-0 bg-card sm:w-[420px]"
-                    onValueChange={(value) => setQqBackend(value as QqProtocol)}
-                    value={qqBackend}
-                  >
-                    {qqBackendOptions.map((option) => {
-                      const selected = qqBackend === option.value;
-                      const disabled = qqBackendSwitchBlocked && !selected;
-
-                      return (
-                        <label
-                          className={cn(
-                            "flex h-8 min-w-0 cursor-pointer items-center justify-center px-3 text-xs font-semibold transition-colors",
-                            selected
-                              ? "bg-primary text-primary-foreground shadow-sm"
-                              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                            disabled && "cursor-not-allowed opacity-55 hover:bg-transparent hover:text-muted-foreground",
-                          )}
-                          key={option.value}
-                        >
-                          <RadioGroupItem className="sr-only" disabled={disabled} value={option.value} />
-                          <span className="truncate">{option.label}</span>
-                        </label>
-                      );
-                    })}
-                  </RadioGroup>
-                  {qqBackend === "official" && !snapshot.initState.qqOfficialConfigured ? (
-                    <OfficialQqCredentialsFields appId={officialAppId} appSecret={officialAppSecret} onAppIdChange={setOfficialAppId} onAppSecretChange={setOfficialAppSecret} disabled={busy !== null} />
-                  ) : null}
-                  <Button disabled={!canSaveQqBackend} onClick={() => void saveQqBackend()}>
-                    {busy === "qq" ? <Loader2 className="animate-spin" /> : <Save />}
-                    保存后端
-                  </Button>
-                </div>
-                <div className="settings-section grid gap-3 bg-muted/40 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">消息平台 WebUI 端口</p>
-                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        消息平台页面会按这里保存的端口打开 NapCat / SnowLuma WebUI。
-                      </p>
-                    </div>
-                    <Button
-                      disabled={busy !== null || !qqWebuiPortsDirty || !qqWebuiPortsValid}
-                      onClick={saveQqWebuiPorts}
-                      size="sm"
-                    >
-                      <Save className="size-4" />
-                      保存端口
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {qqBackendOptions.filter((option): option is typeof option & { value: QqBackend } => option.value !== "official").map((option) => {
-                      const port = qqWebuiPorts[option.value];
-                      const valid = isValidPortText(port);
-
-                      return (
-                        <label className="grid gap-1.5 text-xs font-medium text-muted-foreground" key={option.value}>
-                          {option.label} WebUI
-                          <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
-                            <span className="font-mono text-xs text-muted-foreground">127.0.0.1:</span>
-                            <Input
-                              className={cn("h-8 w-24 font-mono text-sm", !valid && "border-destructive")}
-                              disabled={busy !== null}
-                              inputMode="numeric"
-                              max={65535}
-                              min={1}
-                              onChange={(event) => {
-                                const value = event.target.value.replace(/\D/gu, "").slice(0, 5);
-                                setQqWebuiPorts((current) => ({ ...current, [option.value]: value }));
-                              }}
-                              type="number"
-                              value={port}
-                            />
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-                {qqBackendSwitchBlocked ? (
-                  <div className="rounded-md border border-warning/40 bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
-                    QQ 后端正在运行，暂不能切换 NapCat / SnowLuma。请先停止当前 QQ 后端。
-                  </div>
-                ) : null}
-                <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">重新安装 NapCat / SnowLuma</p>
-                    <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                      使用当前一键包内置组件覆盖程序文件，保留配置、数据和日志。
-                    </p>
-                  </div>
-                  <Button
-                    disabled={busy !== null || qqComponentsChangeBlocked}
-                    onClick={() => setConfirmQqComponentsUpgradeOpen(true)}
-                    variant="secondary"
-                  >
-                    {busy === "qq-components:upgrade" ? <Loader2 className="animate-spin" /> : <Download />}
-                    重新安装
-                  </Button>
                 </div>
               </TabsContent>
 
@@ -2970,11 +2724,8 @@ export function SettingsStatusPanel({
 
               </TabsContent>
 
-              <TabsContent className="settings-content" value="logs">
-                <p className="text-xs text-muted-foreground">
-                  服务 stdout、stderr 和桌面壳系统事件会写入日志目录。
-                </p>
-                <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border bg-card">
+              <TabsContent className="settings-content min-h-0 grid-rows-[minmax(0,1fr)_auto] !gap-3 data-[state=active]:flex-1" value="logs">
+                <div className="min-h-0 overflow-y-auto rounded-lg border border-border bg-card">
                   {recentLogs.length > 0 ? (
                     recentLogs.map((entry) => <LogLine entry={entry} key={entry.id} />)
                   ) : (
@@ -3106,12 +2857,6 @@ export function SettingsStatusPanel({
         </DialogContent>
       </Dialog>
 
-      <QqWebuiDialog
-        open={snowlumaWebuiOpen}
-        onOpenChange={setSnowlumaWebuiOpen}
-        backend="snowluma"
-        url={`http://127.0.0.1:${readQqWebuiPort("snowluma")}/`}
-      />
       <Dialog
         open={confirmLauncherSettingsResetOpen}
         onOpenChange={(next) => {
@@ -3189,45 +2934,6 @@ export function SettingsStatusPanel({
         >
           {busy === "launcher:reset-all" ? <Loader2 className="animate-spin" /> : <Trash2 />}
           确认还原
-        </Button>
-      </DialogFooter>
-      </DialogContent>
-    </Dialog>
-    <Dialog
-      open={confirmQqComponentsUpgradeOpen}
-      onOpenChange={(next) => {
-        if (!next && busy !== "qq-components:upgrade") setConfirmQqComponentsUpgradeOpen(false);
-      }}
-    >
-      <DialogContent size="md">
-      <DialogHeader
-        description="这会用一键包内置的 NapCat 与 SnowLuma 程序文件覆盖现有组件。"
-        icon={<Download className="size-4" />}
-        title="确认重新安装？"
-        tone="warning"
-      />
-      <DialogBody className="space-y-3 text-sm">
-        <div className="rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground">
-          配置、数据和日志会被保留；执行前请确认 MaiBot Core 与 QQ 后端都已停止。
-        </div>
-        {qqComponentsChangeBlocked ? (
-          <div className="rounded-md border border-warning/30 bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
-            MaiBot Core 或 QQ 后端仍在运行，请先停止全部服务。
-          </div>
-        ) : null}
-      </DialogBody>
-      <DialogFooter>
-        <Button disabled={busy === "qq-components:upgrade"} onClick={() => setConfirmQqComponentsUpgradeOpen(false)} size="sm" variant="ghost">
-          取消
-        </Button>
-        <Button
-          disabled={busy === "qq-components:upgrade" || qqComponentsChangeBlocked}
-          onClick={upgradeQqComponents}
-          size="sm"
-          variant="secondary"
-        >
-          {busy === "qq-components:upgrade" ? <Loader2 className="animate-spin" /> : <Download />}
-          重新安装
         </Button>
       </DialogFooter>
       </DialogContent>

@@ -74,6 +74,7 @@ import {
 import { useAppearance, usesRetroStructure } from "@/lib/use-appearance";
 import { cn } from "@/lib/utils";
 import { QqWebuiDialog } from "./QqWebuiDialog";
+import { MessagePlatformAdvancedSettings } from "./MessagePlatformAdvancedSettings";
 import { OfficialQqCredentialsFields } from "./OfficialQqCredentialsFields";
 import { saveQqProtocol } from "@/lib/qq-protocol";
 import { QuickActionsPanel } from "./QuickActionsPanel";
@@ -2044,6 +2045,9 @@ export function MessagePlatformPanel({
             {qqBackendBusy ? <p className="w-full text-xs text-muted-foreground">请先停止当前 QQ 协议端，再切换。</p> : null}
             {error && !messagePlatformDialogOpen ? <p className="w-full text-xs text-destructive">{error}</p> : null}
           </section>
+          <div className="mt-4 flex justify-end">
+            <MessagePlatformAdvancedSettings snapshot={snapshot} refreshSnapshot={refreshSnapshot} disabled={busy !== null} />
+          </div>
           {currentProtocol === "napcat" ? (
             <aside className={cn("mt-4 space-y-4 !border-0 !bg-amber-100 p-5 !text-amber-950 dark:!bg-amber-950 dark:!text-amber-100", useRetroStyle ? "retro-panel" : "rounded-lg")}>
               <h2 className="flex items-center gap-2 text-xl font-bold">

@@ -188,3 +188,21 @@ test("current [client] wins over stale [luma_client] in the same config", async 
   expect(restored.client.token).toBe("active-token");
   expect(await endpoint(paths, "snowluma")).toEqual({ port: 7998, token: "active-token" });
 });
+
+test("backend accounts retain separately entered values across protocol switches", async () => {
+  const { paths, manager } = await fixture();
+  await manager.setQqAccount("123456", undefined, undefined, "napcat");
+  await manager.setQqBackend("snowluma");
+  expect(manager.getQqBackendAccounts()).toEqual({ napcat: "123456", snowluma: undefined });
+  await manager.setQqAccount("654321", undefined, undefined, "snowluma");
+  await manager.setQqBackend("napcat");
+  expect(manager.getQqBackendAccounts()).toEqual({ napcat: "123456", snowluma: "654321" });
+  expect(new InitManager(paths).getQqBackendAccounts()).toEqual({ napcat: "123456", snowluma: "654321" });
+});
+
+test("legacy message platform account belongs only to its saved backend", async () => {
+  const { paths, manager } = await fixture();
+  await mkdir(paths.userDataRoot, { recursive: true });
+  await writeFile(join(paths.userDataRoot, "message-platform.json"), JSON.stringify({ version: 1, backend: "snowluma", qqAccount: "654321" }));
+  expect(manager.getQqBackendAccounts()).toEqual({ napcat: undefined, snowluma: "654321" });
+});

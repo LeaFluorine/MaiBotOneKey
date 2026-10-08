@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { QqProtocol, QqProtocolOptions } from "../shared/contracts";
+import type { MessagePlatformLoginInfo, QqProtocol, QqProtocolOptions } from "../shared/contracts";
 import type {
   BotAccountConfigState,
   BotPlatformAccountSetupRequest,
@@ -165,6 +165,7 @@ const desktopBridge: DesktopBridge = {
   },
   init: {
     getState: () => ipcRenderer.invoke("init:getState") as Promise<InitState>,
+    getLoginInfo: () => ipcRenderer.invoke("init:getLoginInfo") as Promise<MessagePlatformLoginInfo>,
     repair: (options?: InitRepairOptions) =>
       ipcRenderer.invoke("init:repair", options) as Promise<InitRepairResult>,
     resetSnowLuma: () =>

@@ -1544,6 +1544,17 @@ export class ServiceManager extends EventEmitter {
     return fallback;
   }
 
+  async readQqWebuiTokens(): Promise<{ napcat?: string; snowluma?: string }> {
+    const [napcat, snowlumaUrl] = await Promise.all([
+      this.initManager.readNapCatWebUiToken(),
+      this.snowLumaWebuiAuth.resolveUrl("http://127.0.0.1:5099/"),
+    ]);
+    return {
+      napcat: napcat.token,
+      snowluma: new URL(snowlumaUrl).searchParams.get("token") ?? undefined,
+    };
+  }
+
   private async resolveNapCatUrl(fallback: string): Promise<string> {
     try {
       const { token } = await this.initManager.readNapCatWebUiToken();

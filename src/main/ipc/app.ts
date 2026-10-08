@@ -2920,6 +2920,15 @@ export function registerAppIpc({
     return initManager.getState();
   });
 
+  ipcMain.handle("init:getLoginInfo", async () => {
+    const accounts = initManager.getQqBackendAccounts();
+    const tokens = await serviceManager.readQqWebuiTokens();
+    return {
+      napcat: { qqAccount: accounts.napcat, webuiToken: tokens.napcat },
+      snowluma: { qqAccount: accounts.snowluma, webuiToken: tokens.snowluma },
+    };
+  });
+
   ipcMain.handle(
     "init:setQqBackend",
     async (_event, backend: QqBackend, options?: InitRepairOptions): Promise<InitState> => {

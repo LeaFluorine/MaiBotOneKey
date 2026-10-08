@@ -1081,6 +1081,7 @@ interface StoredMessagePlatformFile {
   version: 1;
   backend?: QqBackend;
   qqAccount?: string;
+  accounts?: Partial<Record<QqBackend, string>>;
   configuredAt?: number;
   adapterConfigInitialized?: Partial<Record<QqBackend, number>>;
 }
@@ -2606,7 +2607,7 @@ export class InitManager {
     qqBackend: QqBackend = "napcat",
     options: InitRepairOptions = {},
   ): Promise<InitState> {
-    if (!(qqBackend === "snowluma" && !qqAccount) && !isDigits(qqAccount)) {
+    if (!isDigits(qqAccount) || UNCONFIGURED_QQ_ACCOUNTS.has(qqAccount)) {
       throw new Error("QQ 号必须是纯数字");
     }
 
@@ -2640,6 +2641,7 @@ export class InitManager {
       qqBackend,
       qqAccount,
       initializedAdapterConfig ? qqBackend : undefined,
+      true,
     );
     await this.saveQqProtocolSelection(qqBackend);
     return this.getState();
@@ -3630,6 +3632,11 @@ export class InitManager {
     return join(this.paths.userDataRoot, QQ_BACKEND_FILE);
   }
 
+  getQqBackendAccounts(): Partial<Record<QqBackend, string>> {
+    const stored = this.readMessagePlatformStore();
+    return { ...stored?.accounts };
+  }
+
   private messagePlatformPath(): string {
     return join(this.paths.userDataRoot, MESSAGE_PLATFORM_FILE);
   }
@@ -3645,6 +3652,12 @@ export class InitManager {
         version: 1,
         backend,
         qqAccount: typeof parsed.qqAccount === "string" ? parsed.qqAccount : undefined,
+        accounts: {
+          napcat: typeof parsed.accounts?.napcat === "string" ? parsed.accounts.napcat
+            : !parsed.accounts && backend === "napcat" && typeof parsed.qqAccount === "string" ? parsed.qqAccount : undefined,
+          snowluma: typeof parsed.accounts?.snowluma === "string" ? parsed.accounts.snowluma
+            : !parsed.accounts && backend === "snowluma" && typeof parsed.qqAccount === "string" ? parsed.qqAccount : undefined,
+        },
         configuredAt: typeof parsed.configuredAt === "number" ? parsed.configuredAt : undefined,
         adapterConfigInitialized: {
           napcat: typeof initialized.napcat === "number" ? initialized.napcat : undefined,
@@ -3708,6 +3721,7 @@ export class InitManager {
     backend: QqBackend,
     qqAccount: string,
     initializedBackend?: QqBackend,
+    recordAccount = false,
   ): Promise<void> {
     const existing = this.readMessagePlatformStore();
     const adapterConfigInitialized = {
@@ -3724,6 +3738,7 @@ export class InitManager {
         version: 1,
         backend,
         qqAccount,
+        accounts: { ...this.getQqBackendAccounts(), ...(recordAccount ? { [backend]: qqAccount } : {}) },
         configuredAt: existing?.configuredAt ?? Date.now(),
         updatedAt: Date.now(),
         adapterConfigInitialized,

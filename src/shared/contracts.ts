@@ -1166,6 +1166,8 @@ export interface QqAccountSetupRequest {
   resetInvalidAdapterConfigs?: boolean;
 }
 
+export type MessagePlatformLoginInfo = Record<QqBackend, { qqAccount?: string; webuiToken?: string }>;
+
 export interface BotPlatformAccountSetupRequest {
   platform: string;
   account: string;
@@ -1433,6 +1435,7 @@ export interface DesktopBridge {
     resetSnowLuma: () => Promise<SnowLumaResetResult>;
     upgradeQqComponents: () => Promise<QqComponentUpgradeResult>;
     getBotAccountConfigState: () => Promise<BotAccountConfigState>;
+    getLoginInfo: () => Promise<MessagePlatformLoginInfo>;
     setBotPlatformAccount: (
       request: BotPlatformAccountSetupRequest,
     ) => Promise<BotAccountConfigState>;

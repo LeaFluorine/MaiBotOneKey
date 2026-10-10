@@ -168,6 +168,7 @@ const desktopBridge: DesktopBridge = {
     getLoginInfo: () => ipcRenderer.invoke("init:getLoginInfo") as Promise<MessagePlatformLoginInfo>,
     repair: (options?: InitRepairOptions) =>
       ipcRenderer.invoke("init:repair", options) as Promise<InitRepairResult>,
+    syncQqConnections: () => ipcRenderer.invoke("init:syncQqConnections") as Promise<InitRepairResult>,
     resetSnowLuma: () =>
       ipcRenderer.invoke("init:resetSnowLuma") as Promise<SnowLumaResetResult>,
     upgradeQqComponents: () =>

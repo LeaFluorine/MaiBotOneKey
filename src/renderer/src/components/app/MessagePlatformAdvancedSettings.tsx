@@ -1,4 +1,4 @@
-import { Download, Loader2, Save, Settings } from "lucide-react";
+import { Download, Loader2, RefreshCw, Save, Settings } from "lucide-react";
 import type React from "react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -89,6 +89,22 @@ export function MessagePlatformAdvancedSettings({ snapshot, refreshSnapshot, dis
     toast.success("消息平台 WebUI 端口已保存");
   }, [qqWebuiPorts.napcat, qqWebuiPorts.snowluma, qqWebuiPortsValid]);
 
+  const syncConnections = async () => {
+    setBusy("qq-connections:sync");
+    setError(null);
+    try {
+      const bridge = window.maibotDesktop;
+      if (!bridge) throw new Error("无法连接启动器");
+      await bridge.init.syncQqConnections();
+      await refreshSnapshot();
+      toast.success("QQ 连接配置已同步");
+    } catch (error) {
+      setError(messageFromError(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <>
       <Button disabled={disabled || busy !== null} onClick={() => {
@@ -106,6 +122,7 @@ export function MessagePlatformAdvancedSettings({ snapshot, refreshSnapshot, dis
             <Tabs defaultValue="ports" className="space-y-4">
               <TabsList className="flex h-auto flex-wrap">
                 <TabsTrigger value="ports">WebUI 端口</TabsTrigger>
+                <TabsTrigger value="connections">连接配置</TabsTrigger>
                 <TabsTrigger value="reinstall">重新安装</TabsTrigger>
               </TabsList>
               <TabsContent value="ports" className="space-y-4">
@@ -176,6 +193,28 @@ export function MessagePlatformAdvancedSettings({ snapshot, refreshSnapshot, dis
                       ))}
                     </div>
                   )}
+                </div>
+              </TabsContent>
+              <TabsContent value="connections" className="space-y-3">
+                <div className="settings-section grid gap-3 bg-muted/40 p-3">
+                  <p className="text-sm font-medium">同步 QQ 连接配置</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    将当前 NapCat / SnowLuma 的 OneBot 连接地址、端口和 token 与 MaiBot QQ 适配器对齐。此操作会写入连接配置。
+                  </p>
+                  {snapshot.initState.qqProtocol === "official" ? (
+                    <p className="text-xs text-muted-foreground">官方 QQ 适配器不使用 OneBot 连接，无需同步。</p>
+                  ) : qqComponentsChangeBlocked ? (
+                    <p className="text-xs text-warning-foreground">请先停止 MaiBot Core 和 QQ 协议端。</p>
+                  ) : null}
+                  <Button
+                    disabled={busy !== null || qqComponentsChangeBlocked || snapshot.initState.qqProtocol === "official"}
+                    onClick={() => void syncConnections()}
+                    size="sm"
+                    variant="secondary"
+                  >
+                    {busy === "qq-connections:sync" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                    同步连接配置
+                  </Button>
                 </div>
               </TabsContent>
               <TabsContent value="reinstall" className="space-y-3">

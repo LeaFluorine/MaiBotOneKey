@@ -35,9 +35,6 @@ import type {
   InitCheckStatus,
   LogEntry,
   MaiBotDataResetResult,
-  MaiBotStorageCategory,
-  MaiBotStorageCleanupTarget,
-  MaiBotStorageStats,
   LauncherUiSettings,
   NetworkProxySettings,
   RuntimePathConfig,
@@ -67,7 +64,6 @@ import {
   DialogHeader,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Kbd } from "@/components/ui/kbd";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import maiMascotImage from "@/assets/mai2.png";
@@ -78,11 +74,6 @@ import {
   setClosePreference,
   type ClosePreference,
 } from "@/lib/close-preference";
-import {
-  adapterBackendLabel,
-  adapterConfigResetRequestFromError,
-  type AdapterConfigResetRequest,
-} from "@/lib/adapter-config-reset";
 import {
   RETRO_WINDOW_CORNER_RADIUS_MIN,
   WINDOW_CORNER_RADIUS_MAX,
@@ -95,7 +86,6 @@ import {
   type FontFamily,
   type InterfaceScale,
 } from "@/lib/use-appearance";
-import { useShortcut } from "@/lib/use-shortcut";
 import { useTheme, type ThemePreference } from "@/lib/use-theme";
 import { cn } from "@/lib/utils";
 import { settingsLogMessage, settingsLogs } from "@/lib/settings-logs";
@@ -384,13 +374,6 @@ const CODEX_PET_PREVIEW_HEIGHT = 42;
 const STARTUP_WIZARD_STORAGE_KEY = "maibot-startup-wizard-seen";
 const DEVELOPER_MODE_STORAGE_KEY = "maibot-developer-mode-enabled";
 
-const storageCleanupLabel: Record<MaiBotStorageCleanupTarget, string> = {
-  images: "清理图片",
-  emoji: "清理表情",
-  marketCache: "清理缓存",
-  logs: "清理日志",
-};
-
 function messageFromError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -419,22 +402,6 @@ function CodexPetPreview({ url, label }: { url: string; label: string }): React.
       />
     </span>
   );
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return "0 B";
-  }
-
-  const units = ["B", "KB", "MB", "GB"];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  return `${value >= 10 || unitIndex === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
 }
 
 function formatTime(timestamp?: number): string {
@@ -495,65 +462,6 @@ function PathField({
           </Button>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-function StorageCategoryItem({
-  category,
-  busy,
-  cleanupBlocked,
-  onCleanup,
-  onOpenPath,
-}: {
-  category: MaiBotStorageCategory;
-  busy: boolean;
-  cleanupBlocked: boolean;
-  onCleanup: (target: MaiBotStorageCleanupTarget) => void;
-  onOpenPath: (path: string) => void;
-}): React.JSX.Element {
-  const cleanupDisabled =
-    busy ||
-    cleanupBlocked ||
-    !category.cleanupTarget ||
-    !category.exists ||
-    category.sizeBytes <= 0;
-
-  return (
-    <div className="settings-section grid gap-3 bg-card p-3">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{category.label}</span>
-            <Badge variant={category.exists ? "secondary" : "outline"}>
-              {category.exists ? formatBytes(category.sizeBytes) : "未生成"}
-            </Badge>
-            {category.cleanupTarget ? <Badge variant="outline">可清理</Badge> : null}
-          </div>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{category.description}</p>
-        </div>
-        <Button aria-label={`打开 ${category.label}`} onClick={() => onOpenPath(category.path)} size="icon" variant="ghost">
-          <FolderOpen />
-        </Button>
-      </div>
-      <div className="grid gap-1 font-mono text-[11px] text-muted-foreground sm:grid-cols-3">
-        <span>文件 {category.fileCount}</span>
-        <span>目录 {Math.max(0, category.directoryCount)}</span>
-        <span>更新 {formatDateTime(category.latestModifiedAt)}</span>
-      </div>
-      {category.cleanupTarget ? (
-        <div className="flex justify-end">
-          <Button
-            disabled={cleanupDisabled}
-            onClick={() => category.cleanupTarget && onCleanup(category.cleanupTarget)}
-            size="sm"
-            variant="outline"
-          >
-            {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
-            {storageCleanupLabel[category.cleanupTarget]}
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -811,7 +719,7 @@ function RuntimeResourcePathEditor({
   const dirty = trimmedValue !== config.value;
 
   return (
-    <div className="settings-section bg-card p-3">
+    <div className="grid gap-2">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -827,12 +735,12 @@ function RuntimeResourcePathEditor({
       </div>
       <Input
         aria-label={`${config.label} 当前路径`}
-        className="mt-3"
+        className="h-8"
         monospace
         onChange={(event) => setValue(event.target.value)}
         value={value}
       />
-      <div className="mt-3 flex flex-wrap justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <Button disabled={busy || blocked} onClick={() => onSelect(config.key)} size="sm" variant="ghost">
           {busy ? <Loader2 className="animate-spin" /> : <FolderOpen />}
           选择已有目录
@@ -878,11 +786,9 @@ function ServiceDetail({
   onResetCommand: (serviceId: ServiceDescriptor["id"]) => void;
   onSaveCommand: (config: ServiceCommandUpdate) => void;
 }): React.JSX.Element {
-  const [cwd, setCwd] = useState(commandConfig?.cwd ?? service.cwd ?? "");
   const [commandLine, setCommandLine] = useState(commandConfig?.commandLine ?? service.command?.[0] ?? "");
 
   useEffect(() => {
-    setCwd(commandConfig?.cwd ?? service.cwd ?? "");
     setCommandLine(commandConfig?.commandLine ?? service.command?.[0] ?? "");
   }, [commandConfig?.commandLine, commandConfig?.cwd, service.command, service.cwd]);
 
@@ -891,11 +797,10 @@ function ServiceDetail({
   );
 
   return (
-    <div className="settings-section bg-card p-3">
-      <div className="flex items-start justify-between gap-3">
+    <div className="border-t border-border pt-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium leading-tight">{service.name}</span>
             <Badge dot variant={statusVariant[service.status]}>
               {statusText[service.status]}
             </Badge>
@@ -903,7 +808,7 @@ function ServiceDetail({
               {healthText[service.health]}
             </Badge>
           </div>
-          <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground" title={service.url}>
+          <p className="mt-2 break-all font-mono text-[11px] leading-relaxed text-muted-foreground" title={service.url}>
             {service.url}
           </p>
         </div>
@@ -914,22 +819,26 @@ function ServiceDetail({
         </Badge>
         {service.desired ? <Badge variant="warning">守护中</Badge> : null}
       </div>
-      <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground md:grid-cols-2">
-        <span>端口: {service.ports.map((port) => `:${port}`).join(" / ")}</span>
-        <span>启动: {formatTime(service.startedAt)}</span>
-        <span className="truncate" title={service.cwd}>
-          cwd: {service.cwd ?? "-"}
-        </span>
-        <span>停止: {formatTime(service.stoppedAt)}</span>
-        <span>重启次数: {service.restartAttempts ?? 0}</span>
-      </div>
-      {service.command ? (
+      <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] sm:grid-cols-4">
+        {[
+          ["监听端口", service.ports.join(" / ") || "未记录"],
+          ["最近启动", formatTime(service.startedAt)],
+          ["最近停止", formatTime(service.stoppedAt)],
+          ["重启次数", String(service.restartAttempts ?? 0)],
+        ].map(([label, value]) => (
+          <div className="flex min-w-0 items-baseline gap-2" key={label}>
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="break-words font-mono text-foreground">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {service.command && !commandConfig ? (
         <code className="mt-3 block overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-muted px-2 py-1.5 font-mono text-[11px] text-foreground/75">
           {service.command.join(" ")}
         </code>
       ) : null}
       {commandConfig ? (
-        <div className="settings-section mt-3 grid gap-2 bg-muted/40 p-2.5">
+        <div className="mt-3 grid gap-2 border-t border-border pt-3">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-xs font-medium text-foreground">启动命令</p>
@@ -941,15 +850,9 @@ function ServiceDetail({
               {commandConfig.customized ? "自定义" : "默认"}
             </Badge>
           </div>
+
           <Input
-            aria-label={`${service.name} 工作目录`}
-            disabled
-            monospace
-            placeholder={commandConfig.defaultCwd}
-            value={cwd}
-          />
-          <Input
-            aria-label={`${service.name} 启动命令`}
+            aria-label={`${service.name} 启动命令`} className="h-8"
             monospace
             onChange={(event) => setCommandLine(event.target.value)}
             placeholder={commandConfig.defaultCommandLine}
@@ -1067,17 +970,12 @@ export function SettingsStatusPanel({
   const [developerModeEnabled, setDeveloperModeEnabled] = useState(
     () => localStorage.getItem(DEVELOPER_MODE_STORAGE_KEY) === "true",
   );
-  const [adapterResetRequest, setAdapterResetRequest] =
-    useState<AdapterConfigResetRequest | null>(null);
   const [confirmLauncherSettingsResetOpen, setConfirmLauncherSettingsResetOpen] = useState(false);
   const [confirmLauncherFullResetOpen, setConfirmLauncherFullResetOpen] = useState(false);
   const [confirmMaiBotDataResetFirstOpen, setConfirmMaiBotDataResetFirstOpen] = useState(false);
   const [confirmMaiBotDataResetSecondOpen, setConfirmMaiBotDataResetSecondOpen] = useState(false);
-  const [confirmStorageCleanupTarget, setConfirmStorageCleanupTarget] = useState<MaiBotStorageCleanupTarget | null>(null);
   const [environmentServicesExpanded, setEnvironmentServicesExpanded] = useState(false);
   const [lastMaiBotDataReset, setLastMaiBotDataReset] = useState<MaiBotDataResetResult | null>(null);
-  const [storageStats, setStorageStats] = useState<MaiBotStorageStats | null>(null);
-  const [storageStatsLoading, setStorageStatsLoading] = useState(false);
   const initState = snapshot.initState ?? {
     isReady: false,
     qqBackend: "napcat",
@@ -1173,30 +1071,6 @@ export function SettingsStatusPanel({
     }
   }, [onSnapshot]);
 
-  const refreshStorageStats = useCallback(async () => {
-    setStorageStatsLoading(true);
-    try {
-      const nextStats = await window.maibotDesktop?.data.getMaiBotStorageStats();
-      if (nextStats) {
-        setStorageStats(nextStats);
-      }
-    } catch (nextError) {
-      const resetRequest = adapterConfigResetRequestFromError(nextError);
-      if (resetRequest) {
-        setAdapterResetRequest(resetRequest);
-        setError(null);
-      } else {
-        setError(messageFromError(nextError));
-      }
-    } finally {
-      setStorageStatsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshStorageStats();
-  }, [refreshStorageStats]);
-
   const openPath = useCallback((path: string) => {
     void window.maibotDesktop?.openPath(path);
   }, []);
@@ -1218,26 +1092,6 @@ export function SettingsStatusPanel({
     setClosePreferenceState(preference);
     toast.success(`关闭行为已设为：${closePreferenceText[preference]}`);
   }, []);
-
-  const repair = useCallback(async (resetInvalidAdapterConfigs = false) => {
-    setBusy("repair");
-    setError(null);
-    setAdapterResetRequest(null);
-    try {
-      await window.maibotDesktop?.init.repair({ resetInvalidAdapterConfigs });
-      await refreshSnapshot();
-    } catch (nextError) {
-      const resetRequest = adapterConfigResetRequestFromError(nextError);
-      if (resetRequest) {
-        setAdapterResetRequest(resetRequest);
-        setError(null);
-      } else {
-        setError(messageFromError(nextError));
-      }
-    } finally {
-      setBusy(null);
-    }
-  }, [refreshSnapshot]);
 
   const resetLocalStartupState = useCallback(() => {
     try {
@@ -1316,42 +1170,13 @@ export function SettingsStatusPanel({
       toast.success(`已清空 MaiBot 数据（共 ${result.removedEntries.length} 项）`, {
         description: result.dataDir,
       });
-      await refreshStorageStats();
       await refreshSnapshot();
     } catch (nextError) {
       setError(messageFromError(nextError));
     } finally {
       setBusy(null);
     }
-  }, [refreshSnapshot, refreshStorageStats]);
-
-  const cleanupMaiBotStorage = useCallback(async () => {
-    if (!confirmStorageCleanupTarget) {
-      return;
-    }
-    if (maibotDataBlocked) {
-      setError("请先停止 MaiBot Core，再清理本地数据。");
-      return;
-    }
-
-    setBusy(`storage:cleanup:${confirmStorageCleanupTarget}`);
-    setError(null);
-    try {
-      if (!window.maibotDesktop?.data) {
-        throw new Error("桌面桥未就绪，无法清理 MaiBot 数据");
-      }
-      const result = await window.maibotDesktop.data.cleanupMaiBotStorage(confirmStorageCleanupTarget);
-      setConfirmStorageCleanupTarget(null);
-      toast.success(`${storageCleanupLabel[result.target]}完成`, {
-        description: `移除 ${result.removedEntries.length} 项，释放 ${formatBytes(result.removedBytes)}`,
-      });
-      await refreshStorageStats();
-    } catch (nextError) {
-      setError(messageFromError(nextError));
-    } finally {
-      setBusy(null);
-    }
-  }, [confirmStorageCleanupTarget, maibotDataBlocked, refreshStorageStats]);
+  }, [refreshSnapshot]);
 
   const clearLogs = useCallback(async () => {
     setBusy("logs");
@@ -1674,14 +1499,13 @@ export function SettingsStatusPanel({
     }
   }, [refreshSnapshot]);
 
-  useShortcut("Mod+Shift+R", () => void repair(), { enabled: busy === null });
 
   const environmentServicesPanel = (
     <>
       <Button
         aria-controls={environmentServicesContentId}
         aria-expanded={environmentServicesExpanded}
-        className="h-auto w-full justify-between gap-3 whitespace-normal rounded-lg border-border bg-muted/40 px-3 py-3 text-left"
+        className="!h-auto w-full justify-between gap-3 whitespace-normal rounded-lg border-border bg-muted/40 px-3 !py-4 text-left"
         onClick={() => setEnvironmentServicesExpanded((expanded) => !expanded)}
         type="button"
         variant="outline"
@@ -1692,11 +1516,10 @@ export function SettingsStatusPanel({
           </span>
           <span className="min-w-0">
             <span className="block text-sm font-medium">
-              {environmentServicesExpanded ? "收起环境与服务" : "展开环境与服务"}
+              {environmentServicesExpanded ? "收起环境检查" : "展开环境检查"}
             </span>
             <span className="mt-1 block text-xs text-muted-foreground">
-              {attentionChecks.length > 0 ? `${attentionChecks.length} 项待处理` : "环境检查正常"} · 服务{" "}
-              {services.length} 个
+              {attentionChecks.length > 0 ? `${attentionChecks.length} 项待处理` : "环境检查正常"}
             </span>
           </span>
         </span>
@@ -1707,19 +1530,6 @@ export function SettingsStatusPanel({
 
       {environmentServicesExpanded ? (
         <div className="space-y-4" id={environmentServicesContentId}>
-          <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">环境检查</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                检查运行目录、基础依赖和必要工具是否可用。
-              </p>
-            </div>
-            <Button disabled={busy !== null} onClick={() => void repair()} variant="outline">
-              {busy === "repair" ? <Loader2 className="animate-spin" /> : <Wrench />}
-              准备基础目录
-              <Kbd className="ml-1" keys="Mod+Shift+R" size="xs" tone="muted" />
-            </Button>
-          </div>
           <div className="grid gap-2 md:grid-cols-2">
             {initState.checks.map((check) => (
               <div
@@ -1758,30 +1568,6 @@ export function SettingsStatusPanel({
             ))}
           </div>
 
-          <div className="settings-section grid gap-3 bg-muted/40 p-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-                <Network className="size-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm font-medium">服务状态</p>
-                <p className="text-xs text-muted-foreground">
-                  固定端口模式；端口冲突时报错。托管进程异常退出会有限次自动重启。
-                </p>
-              </div>
-            </div>
-            {services.map((service) => (
-              <ServiceDetail
-                commandBusy={busy === `command:${service.id}`}
-                commandConfig={serviceCommands.find((config) => config.serviceId === service.id)}
-                key={service.id}
-                onOpenPath={openPath}
-                onResetCommand={resetCommandConfig}
-                onSaveCommand={saveCommandConfig}
-                service={service}
-              />
-            ))}
-          </div>
         </div>
       ) : null}
     </>
@@ -1805,47 +1591,6 @@ export function SettingsStatusPanel({
               </div>
             ) : null}
 
-            {adapterResetRequest ? (
-              <div className="rounded-lg border border-warning/40 bg-warning/15 px-3 py-3 text-xs">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium text-warning-foreground">
-                      {adapterBackendLabel(adapterResetRequest.backend)}配置解析失败
-                    </p>
-                    <p className="mt-1 break-all text-muted-foreground">
-                      {adapterResetRequest.configPath}
-                    </p>
-                    <p className="mt-1 text-muted-foreground">
-                      {adapterResetRequest.detail}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        disabled={busy !== null}
-                        onClick={() => {
-                          void repair(true);
-                        }}
-                        size="sm"
-                      >
-                        {busy ? <Loader2 className="animate-spin" /> : <RotateCcw />}
-                        重置默认配置
-                      </Button>
-                      <Button
-                        disabled={busy !== null}
-                        onClick={() => {
-                          setAdapterResetRequest(null);
-                        }}
-                        size="sm"
-                        variant="ghost"
-                      >
-                        暂不修复
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
             <Tabs
               className={activeSettingsTab === "logs" ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-3"}
               onValueChange={setActiveSettingsTab}
@@ -1866,7 +1611,7 @@ export function SettingsStatusPanel({
                 </TabsTrigger>
                 <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="paths">
                   <ShieldCheck className="size-3" />
-                  实例路径
+                  实例管理
                 </TabsTrigger>
                 {developerModeEnabled ? (
                   <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="debug">
@@ -1874,10 +1619,6 @@ export function SettingsStatusPanel({
                     调试
                   </TabsTrigger>
                 ) : null}
-                <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="data">
-                  <Database className="size-3" />
-                  数据
-                </TabsTrigger>
                 <TabsTrigger className="gap-1.5 px-3 text-[11px]" value="logs">
                   <HardDrive className="size-3" />
                   运行日志
@@ -1968,7 +1709,6 @@ export function SettingsStatusPanel({
                 </div>
                 </div>
 
-                <div className="settings-pair-grid">
                 <div className="settings-section grid gap-3 bg-destructive/5 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
@@ -1976,21 +1716,26 @@ export function SettingsStatusPanel({
                         <Trash2 className="size-4" />
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">重置 MaiBot 数据</p>
+                        <p className="text-sm font-medium">重置数据</p>
                         <p className="text-xs text-muted-foreground">
-                          清空 MaiBot Core 的 data 目录，包括数据库、记忆、日志缓存等。该操作不可恢复。
+                          可重置启动器设置、MaiBot 数据或所有数据。重置所有数据会删除运行时资源目录，数据删除不可恢复。
                         </p>
                       </div>
                     </div>
-                    <Button
-                      disabled={busy !== null || maibotDataBlocked}
-                      onClick={() => setConfirmMaiBotDataResetFirstOpen(true)}
-                      size="sm"
-                      variant="destructive"
-                    >
-                      <Trash2 className="size-4" />
-                      重置数据
-                    </Button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button disabled={busy !== null || resourceMoveBlocked} onClick={() => setConfirmLauncherSettingsResetOpen(true)} size="sm" variant="outline">
+                        <RotateCcw className="size-4" />
+                        重置启动器设置
+                      </Button>
+                      <Button disabled={busy !== null || maibotDataBlocked} onClick={() => setConfirmMaiBotDataResetFirstOpen(true)} size="sm" variant="destructive">
+                        <Trash2 className="size-4" />
+                        重置 MaiBot 数据
+                      </Button>
+                      <Button disabled={busy !== null || resourceMoveBlocked} onClick={() => setConfirmLauncherFullResetOpen(true)} size="sm" variant="destructive">
+                        <Trash2 className="size-4" />
+                        重置所有数据
+                      </Button>
+                    </div>
                   </div>
                   {lastMaiBotDataReset ? (
                     <div className="rounded-md border border-warning/40 bg-warning/15 p-3 text-[12px] text-foreground">
@@ -2014,41 +1759,6 @@ export function SettingsStatusPanel({
                       </dl>
                     </div>
                   ) : null}
-                </div>
-
-                <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-destructive/5 p-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-destructive/10 text-destructive">
-                      <RotateCcw className="size-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">重置启动器</p>
-                      <p className="text-xs text-muted-foreground">
-                        清空设置会重走启动引导；完全还原会删除运行时资源目录。
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    <Button
-                      disabled={busy !== null || resourceMoveBlocked}
-                      onClick={() => setConfirmLauncherSettingsResetOpen(true)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      <RotateCcw className="size-4" />
-                      清空启动器设置
-                    </Button>
-                    <Button
-                      disabled={busy !== null || resourceMoveBlocked}
-                      onClick={() => setConfirmLauncherFullResetOpen(true)}
-                      size="sm"
-                      variant="destructive"
-                    >
-                      <Trash2 className="size-4" />
-                      完全还原初始状态
-                    </Button>
-                  </div>
-                </div>
                 </div>
 
                 {environmentServicesPanel}
@@ -2534,9 +2244,6 @@ export function SettingsStatusPanel({
               </TabsContent>
 
               <TabsContent className="settings-content" value="paths">
-                <p className="text-xs text-muted-foreground">
-                  用户数据目录保存一键包设置；一套数据只绑定一套覆盖路径，MaiBot、NapCat 与 python可写环境可以分别放在独立目录。
-                </p>
                 <div className="settings-section grid gap-3 bg-muted/40 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2">
@@ -2544,7 +2251,7 @@ export function SettingsStatusPanel({
                         <HardDrive className="size-4" />
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-medium">实例路径</p>
+                        <p className="text-sm font-medium">实例管理</p>
                         <p className="text-xs text-muted-foreground">
                           迁移会复制当前目录内容；选择已有目录只切换指向，不复制数据。
                         </p>
@@ -2554,6 +2261,7 @@ export function SettingsStatusPanel({
                   </div>
                   <div className="grid gap-2">
                     {editableRuntimeResourcePathConfigs.map((config) => (
+                      <div className="settings-section grid gap-3 bg-card p-3" key={config.key}>
                       <RuntimeResourcePathEditor
                         blocked={
                           resourceMoveBlocked ||
@@ -2561,13 +2269,26 @@ export function SettingsStatusPanel({
                         }
                         busy={busy?.startsWith(`resource:`) === true && busy.endsWith(`:${config.key}`)}
                         config={config}
-                        key={config.key}
                         onMigrate={migrateRuntimeResourcePath}
                         onOpenPath={openPath}
                         onReset={resetRuntimeResourcePath}
                         onSave={saveRuntimeResourcePath}
                         onSelect={selectRuntimeResourcePath}
                       />
+                        {services.filter((service) => service.id === "maibot"
+                          ? config.key === "maibot"
+                          : config.key === (initState.qqBackend ?? "napcat")).map((service) => (
+                          <ServiceDetail
+                            commandBusy={busy === `command:${service.id}`}
+                            commandConfig={serviceCommands.find((command) => command.serviceId === service.id)}
+                            key={service.id}
+                            onOpenPath={openPath}
+                            onResetCommand={resetCommandConfig}
+                            onSaveCommand={saveCommandConfig}
+                            service={service}
+                          />
+                        ))}
+                      </div>
                     ))}
                   </div>
                   {resourceMoveBlocked ? (
@@ -2666,64 +2387,6 @@ export function SettingsStatusPanel({
               </TabsContent>
               ) : null}
 
-              <TabsContent className="settings-content" value="data">
-                <div className="settings-section flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-3">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <span className="grid size-7 shrink-0 place-items-center rounded-md bg-primary/10 text-primary">
-                      <Database className="size-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium">MaiBot 本地数据</p>
-                      <p className="text-xs text-muted-foreground">
-                        {storageStats
-                          ? `共 ${formatBytes(storageStats.totalSizeBytes)}，扫描于 ${formatDateTime(storageStats.scannedAt)}。`
-                          : "统计 data、logs 与常见缓存目录。"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {storageStats ? (
-                      <Button onClick={() => openPath(storageStats.dataDir)} size="sm" variant="outline">
-                        <FolderOpen className="size-4" />
-                        打开 data
-                      </Button>
-                    ) : null}
-                    <Button disabled={storageStatsLoading} onClick={() => void refreshStorageStats()} size="sm" variant="secondary">
-                      {storageStatsLoading ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                      重新扫描
-                    </Button>
-                  </div>
-                </div>
-
-                {maibotDataBlocked ? (
-                  <div className="rounded-md border border-warning/40 bg-warning/15 px-3 py-2 text-xs text-warning-foreground">
-                    MaiBot Core 正在运行或启动中，暂不能清理本地数据。统计和打开目录仍可使用。
-                  </div>
-                ) : null}
-
-                {storageStatsLoading && !storageStats ? (
-                  <div className="rounded-lg border border-border bg-card px-3 py-8 text-center text-xs text-muted-foreground">
-                    正在扫描本地数据...
-                  </div>
-                ) : null}
-
-                {storageStats ? (
-                  <div className="grid gap-3 md:grid-cols-2">
-                    {storageStats.categories.map((category) => (
-                      <StorageCategoryItem
-                        busy={busy === `storage:cleanup:${category.cleanupTarget ?? ""}`}
-                        category={category}
-                        cleanupBlocked={maibotDataBlocked || busy !== null}
-                        key={category.key}
-                        onCleanup={setConfirmStorageCleanupTarget}
-                        onOpenPath={openPath}
-                      />
-                    ))}
-                  </div>
-                ) : null}
-
-              </TabsContent>
-
               <TabsContent className="settings-content min-h-0 grid-rows-[minmax(0,1fr)_auto] !gap-3 data-[state=active]:flex-1" value="logs">
                 <div className="min-h-0 overflow-y-auto rounded-lg border border-border bg-card">
                   {recentLogs.length > 0 ? (
@@ -2742,45 +2405,6 @@ export function SettingsStatusPanel({
         </Card>
       </div>
     </section>
-      <Dialog
-        open={confirmStorageCleanupTarget !== null}
-        onOpenChange={(next) => {
-          if (!next && !busy?.startsWith("storage:cleanup:")) setConfirmStorageCleanupTarget(null);
-        }}
-      >
-        <DialogContent size="sm">
-          <DialogHeader
-            description="只会删除所选类别中的缓存或日志文件，不会清理数据库和记忆目录。"
-            icon={<Trash2 className="size-4" />}
-            title={confirmStorageCleanupTarget ? `${storageCleanupLabel[confirmStorageCleanupTarget]}？` : "清理本地数据？"}
-            tone="warning"
-          />
-          <DialogBody>
-            <p className="text-[13px] leading-relaxed text-muted-foreground">
-              建议确认 MaiBot Core 已停止。清理后相关缓存可能会在下次使用时重新生成。
-            </p>
-          </DialogBody>
-          <DialogFooter>
-            <Button
-              disabled={busy?.startsWith("storage:cleanup:") === true}
-              onClick={() => setConfirmStorageCleanupTarget(null)}
-              size="sm"
-              variant="ghost"
-            >
-              取消
-            </Button>
-            <Button
-              disabled={busy?.startsWith("storage:cleanup:") === true || maibotDataBlocked}
-              onClick={cleanupMaiBotStorage}
-              size="sm"
-              variant="destructive"
-            >
-              {busy?.startsWith("storage:cleanup:") === true ? <Loader2 className="animate-spin" /> : <Trash2 />}
-              确认清理
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       <Dialog
         open={confirmMaiBotDataResetFirstOpen}
         onOpenChange={(next) => {
@@ -2867,7 +2491,7 @@ export function SettingsStatusPanel({
       <DialogHeader
         description="这只会清空启动器自己的设置，并让启动引导重新出现；MaiBot、NapCat、SnowLuma 与 Python 覆盖依赖目录会保留。"
         icon={<RotateCcw className="size-4" />}
-        title="清空启动器设置？"
+        title="重置启动器设置？"
         tone="warning"
       />
       <DialogBody className="space-y-3 text-sm">
@@ -2906,7 +2530,7 @@ export function SettingsStatusPanel({
       <DialogHeader
         description="这会删除当前运行时资源目录，相当于回到新安装后的初始状态。"
         icon={<Trash2 className="size-4" />}
-        title="完全还原初始状态？"
+        title="重置所有数据？"
         tone="danger"
       />
       <DialogBody className="space-y-3 text-sm">

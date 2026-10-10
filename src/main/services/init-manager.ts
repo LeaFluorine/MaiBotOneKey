@@ -1594,17 +1594,21 @@ export class InitManager {
 
   async repair(options: InitRepairOptions = {}): Promise<InitRepairResult> {
     const changedFiles = await this.ensureModulesReady();
-    changedFiles.push(
-      ...(await this.syncSelectedQqAdapterConfigs({
-        resetInvalidConfig: options.resetInvalidAdapterConfigs,
-      })),
-    );
 
     const state = {
       ...(await this.getState()),
       repairedAt: Date.now(),
     };
     return { state, changedFiles };
+  }
+
+  async syncQqConnections(): Promise<InitRepairResult> {
+    if (this.getQqProtocolSync() === "official") {
+      throw new Error("官方 QQ 适配器不使用 OneBot 连接，无需同步。");
+    }
+    const changedFiles = await this.syncSelectedQqAdapterConfigs();
+    if (changedFiles.length === 0) throw new Error("请先在消息平台中配置 QQ 账号与协议端。");
+    return { state: await this.getState(), changedFiles };
   }
 
   async getAgreementState(): Promise<StartupAgreementState> {

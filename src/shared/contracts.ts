@@ -1432,6 +1432,7 @@ export interface DesktopBridge {
   init: {
     getState: () => Promise<InitState>;
     repair: (options?: InitRepairOptions) => Promise<InitRepairResult>;
+    syncQqConnections: () => Promise<InitRepairResult>;
     resetSnowLuma: () => Promise<SnowLumaResetResult>;
     upgradeQqComponents: () => Promise<QqComponentUpgradeResult>;
     getBotAccountConfigState: () => Promise<BotAccountConfigState>;

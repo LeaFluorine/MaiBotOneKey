@@ -206,3 +206,31 @@ test("legacy message platform account belongs only to its saved backend", async 
   await writeFile(join(paths.userDataRoot, "message-platform.json"), JSON.stringify({ version: 1, backend: "snowluma", qqAccount: "654321" }));
   expect(manager.getQqBackendAccounts()).toEqual({ napcat: undefined, snowluma: "654321" });
 });
+for (const backend of ["napcat", "snowluma"] as const) {
+  test(`environment repair preserves ${backend} connection files until explicit synchronization`, async () => {
+    const { paths, manager, adapterPath } = await fixture();
+    await manager.setQqAccount("123456", "shared-token", undefined, backend);
+    manager.ensureModulesReady = async () => [];
+    const configPath = backend === "napcat"
+      ? join(paths.napcatRoot, "napcat", "config", "onebot11_123456.json")
+      : join(paths.snowlumaRoot, "config", "onebot_123456.json");
+    const config = JSON.parse(await readFile(configPath, "utf8"));
+    const server = backend === "napcat" ? config.network.websocketServers[0] : config.networks.wsServers[0];
+    if (backend === "napcat") server.token = "different-token";
+    else server.accessToken = "different-token";
+    const changed = JSON.stringify(config);
+    await writeFile(configPath, changed);
+    const adapterBefore = await readFile(adapterPath, "utf8");
+    await manager.repair();
+    expect(await readFile(configPath, "utf8")).toBe(changed);
+    expect(await readFile(adapterPath, "utf8")).toBe(adapterBefore);
+    await manager.syncQqConnections();
+    expect((await endpoint(paths, backend)).token).toBe("shared-token");
+    expect((parse(await readFile(adapterPath, "utf8")) as any).client.token).toBe("shared-token");
+  });
+}
+
+test("explicit connection synchronization requires configured account", async () => {
+  const { manager } = await fixture();
+  await expect(manager.syncQqConnections()).rejects.toThrow("请先在消息平台中配置");
+});

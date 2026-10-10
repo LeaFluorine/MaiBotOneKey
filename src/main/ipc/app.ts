@@ -2816,12 +2816,23 @@ export function registerAppIpc({
     return initManager.getState({ refreshDependencies: true });
   });
 
+  ipcMain.handle("init:syncQqConnections", async (): Promise<InitRepairResult> => {
+    await serviceManager.refresh();
+    if (serviceManager.snapshot().some(isRuntimeBusy)) {
+      throw new Error("请先停止 MaiBot Core 和 QQ 协议端，再同步连接配置。");
+    }
+    const result = await initManager.syncQqConnections();
+    logStore.append("desktop", "system", "QQ 协议端与适配器连接配置已同步");
+    await broadcastSnapshot();
+    return result;
+  });
+
   ipcMain.handle("init:repair", async (_event, options?: InitRepairOptions): Promise<InitRepairResult> => {
     const result = await initManager.repair(options);
     logStore.append(
       "desktop",
       "system",
-      `Initialization repair changed ${result.changedFiles.length} files.${options?.resetInvalidAdapterConfigs ? " Invalid adapter configs were reset after confirmation." : ""}`,
+      `Initialization repair changed ${result.changedFiles.length} files.`,
     );
     await broadcastSnapshot();
     return result;

@@ -1437,6 +1437,7 @@ export interface DesktopBridge {
     upgradeQqComponents: () => Promise<QqComponentUpgradeResult>;
     getBotAccountConfigState: () => Promise<BotAccountConfigState>;
     getLoginInfo: () => Promise<MessagePlatformLoginInfo>;
+    saveSnowLumaWebuiPassword: (password: string) => Promise<void>;
     setBotPlatformAccount: (
       request: BotPlatformAccountSetupRequest,
     ) => Promise<BotAccountConfigState>;

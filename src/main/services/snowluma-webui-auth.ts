@@ -1,5 +1,5 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 // WebUI credentials are independent of OneBot websocket accessToken.
@@ -12,6 +12,54 @@ export class SnowLumaWebuiAuth {
 
   private get credentialPath(): string {
     return join(this.userDataRoot, "snowluma-webui-credential.json");
+  }
+
+  async savePassword(password: string): Promise<void> {
+    if (typeof password !== "string" || password.length < 10 || !/[a-z]/u.test(password)
+      || !/[A-Z]/u.test(password) || !/[^A-Za-z0-9\s]/u.test(password) || /\s/u.test(password)) {
+      throw new Error("密码须至少 10 位，包含大小写字母和特殊符号，且不能包含空白字符。");
+    }
+    const configPath = join(this.root, "config", "webui.json");
+    const readOptional = async (path: string) => readFile(path, "utf8").catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+      return undefined;
+    });
+    const configText = await readOptional(configPath);
+    const config = configText === undefined ? {} : JSON.parse(configText);
+    if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("SnowLuma WebUI 配置格式错误。");
+    const previousCredential = await readOptional(this.credentialPath);
+    const salt = randomBytes(16);
+    const now = new Date().toISOString();
+    const state = {
+      passwordHash: scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1 }).toString("hex"),
+      passwordSalt: salt.toString("hex"),
+      mustChangePassword: false,
+      generatedAt: typeof config.generatedAt === "string" && Number.isFinite(Date.parse(config.generatedAt)) ? config.generatedAt : now,
+      updatedAt: now,
+      ...(config.totp !== undefined ? { totp: config.totp } : {}),
+    };
+    const replaceFile = async (path: string, content: string) => {
+      await mkdir(dirname(path), { recursive: true });
+      const temporary = `${path}.${randomBytes(8).toString("hex")}.tmp`;
+      try {
+        await writeFile(temporary, content, { mode: 0o600, flag: "wx" });
+        await rename(temporary, path);
+      } finally {
+        await rm(temporary, { force: true });
+      }
+    };
+    // Write the remembered credential first; restore it if config replacement fails.
+    await replaceFile(this.credentialPath, JSON.stringify({ password }));
+    try {
+      await replaceFile(configPath, JSON.stringify(state, null, 2));
+    } catch (error) {
+      if (previousCredential === undefined) await rm(this.credentialPath, { force: true });
+      else await replaceFile(this.credentialPath, previousCredential);
+      throw error;
+    }
+    this.initialPassword = undefined;
+    this.verifiedKey = undefined;
+    this.verifiedPassword = undefined;
   }
 
   async prepareEnvironment(): Promise<Record<string, string>> {

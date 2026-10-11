@@ -540,6 +540,7 @@ export class ServiceManager extends EventEmitter {
   private readonly externalProcesses = new Map<ServiceId, ChildProcess>();
   private readonly logLineBuffers = new Map<ServiceId, string>();
   private readonly snowLumaWebuiAuth: SnowLumaWebuiAuth;
+  private snowLumaPasswordSaveInProgress = false;
 
   constructor(
     private readonly paths: RuntimePaths,
@@ -633,6 +634,9 @@ export class ServiceManager extends EventEmitter {
   }
 
   async start(serviceId: ServiceId, resetRestartAttempts = true): Promise<ServiceDescriptor> {
+    if (serviceId === "napcat" && this.snowLumaPasswordSaveInProgress) {
+      throw new Error("正在保存 SnowLuma WebUI 密码，请稍后再启动 QQ 后端。");
+    }
     this.definitions = this.createDefinitions();
     let definition = this.getDefinition(serviceId);
     const state = this.getState(serviceId);
@@ -1553,6 +1557,31 @@ export class ServiceManager extends EventEmitter {
       napcat: napcat.token,
       snowluma: new URL(snowlumaUrl).searchParams.get("token") ?? undefined,
     };
+  }
+
+  async saveSnowLumaWebuiPassword(password: string): Promise<void> {
+    if (this.snowLumaPasswordSaveInProgress) throw new Error("正在保存 SnowLuma WebUI 密码，请稍后重试。");
+    this.snowLumaPasswordSaveInProgress = true;
+    try {
+      const state = this.getState("napcat");
+      if (this.initManager.getQqBackendSync() === "snowluma"
+        && (state.managed || state.desired || ["starting", "running", "stopping"].includes(state.status))) {
+        throw new Error("请先停止 SnowLuma，再保存 WebUI 密码。");
+      }
+      const runtime = await readFile(join(this.paths.snowlumaRoot, "config", "runtime.json"), "utf8")
+        .then((text) => JSON.parse(text)).catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== "ENOENT") throw error;
+          return {};
+        });
+      const port = Number(runtime.webuiPort || 5099);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("SnowLuma WebUI 端口配置无效。");
+      const occupied = await Promise.all([probePort(port), probePort(port, "::1")]);
+      if (occupied.some(Boolean)) throw new Error(`SnowLuma WebUI 端口 ${port} 正在使用，请先停止服务再保存密码。`);
+      await this.snowLumaWebuiAuth.savePassword(password);
+      this.logs.append("napcat", "system", "SnowLuma WebUI 密码与自动登录凭据已更新。");
+    } finally {
+      this.snowLumaPasswordSaveInProgress = false;
+    }
   }
 
   private async resolveNapCatUrl(fallback: string): Promise<string> {

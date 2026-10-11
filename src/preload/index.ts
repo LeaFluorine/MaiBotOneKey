@@ -166,6 +166,7 @@ const desktopBridge: DesktopBridge = {
   init: {
     getState: () => ipcRenderer.invoke("init:getState") as Promise<InitState>,
     getLoginInfo: () => ipcRenderer.invoke("init:getLoginInfo") as Promise<MessagePlatformLoginInfo>,
+    saveSnowLumaWebuiPassword: (password: string) => ipcRenderer.invoke("init:saveSnowLumaWebuiPassword", password) as Promise<void>,
     repair: (options?: InitRepairOptions) =>
       ipcRenderer.invoke("init:repair", options) as Promise<InitRepairResult>,
     syncQqConnections: () => ipcRenderer.invoke("init:syncQqConnections") as Promise<InitRepairResult>,

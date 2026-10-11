@@ -27,6 +27,7 @@ export function MessagePlatformAdvancedSettings({ snapshot, refreshSnapshot, dis
   const [open, setOpen] = useState(false);
   const [loginInfo, setLoginInfo] = useState<MessagePlatformLoginInfo | null>(null);
   const [loginInfoError, setLoginInfoError] = useState<string | null>(null);
+  const [snowLumaPassword, setSnowLumaPassword] = useState("");
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -36,7 +37,10 @@ export function MessagePlatformAdvancedSettings({ snapshot, refreshSnapshot, dis
       try {
         const info = await window.maibotDesktop?.init.getLoginInfo();
         if (!info) throw new Error("无法读取登录信息");
-        if (!cancelled) setLoginInfo(info);
+        if (!cancelled) {
+          setLoginInfo(info);
+          setSnowLumaPassword(info.snowluma.webuiToken ?? "");
+        }
       } catch (error) {
         if (!cancelled) setLoginInfoError(messageFromError(error));
       }
@@ -55,6 +59,26 @@ export function MessagePlatformAdvancedSettings({ snapshot, refreshSnapshot, dis
   );
   const qqWebuiPortsDirty = qqWebuiPorts.napcat !== readQqWebuiPort("napcat") || qqWebuiPorts.snowluma !== readQqWebuiPort("snowluma");
   const qqWebuiPortsValid = isValidPortText(qqWebuiPorts.napcat) && isValidPortText(qqWebuiPorts.snowluma);
+  const snowLumaPasswordDirty = loginInfo !== null && snowLumaPassword !== (loginInfo.snowluma.webuiToken ?? "");
+  const snowLumaRunning = snapshot.initState.qqBackend === "snowluma" && snapshot.services.some((service) =>
+    service.id === "napcat" && (service.managed || ["starting", "running", "stopping"].includes(service.status)),
+  );
+  const saveSnowLumaPassword = async () => {
+    setBusy("snowluma:password");
+    setError(null);
+    try {
+      const bridge = window.maibotDesktop;
+      if (!bridge) throw new Error("无法连接启动器");
+      await bridge.init.saveSnowLumaWebuiPassword(snowLumaPassword);
+      setLoginInfo((current) => current ? { ...current, snowluma: { ...current.snowluma, webuiToken: snowLumaPassword } } : current);
+      toast.success("SnowLuma WebUI 密码已保存，下次启动将使用新密码自动登录");
+      await refreshSnapshot();
+    } catch (nextError) {
+      setError(messageFromError(nextError));
+    } finally {
+      setBusy(null);
+    }
+  };
   const upgradeQqComponents = useCallback(async () => {
     if (qqComponentsChangeBlocked) {
       setError("请先停止 MaiBot Core 和 QQ 后端，再重新安装 NapCat / SnowLuma。");
@@ -183,8 +207,22 @@ export function MessagePlatformAdvancedSettings({ snapshot, refreshSnapshot, dis
                           <p className="text-sm font-medium">{label}</p>
                           <label className="grid gap-1.5 text-xs text-muted-foreground">
                             {value === "snowluma" ? "WebUI 登录 token / 密码" : "WebUI 登录 token"}
-                            <Input readOnly className="font-mono" value={loginInfo[value].webuiToken ?? ""} placeholder="未获取到登录 token" />
+                            {value === "snowluma" ? (
+                              <Input className="font-mono" type="password" autoComplete="new-password" disabled={busy !== null}
+                                value={snowLumaPassword} onChange={(event) => setSnowLumaPassword(event.target.value)}
+                                placeholder="输入新的 WebUI 密码" />
+                            ) : <Input readOnly className="font-mono" value={loginInfo[value].webuiToken ?? ""} placeholder="未获取到登录 token" />}
                           </label>
+                          {value === "snowluma" ? (
+                            <div className="grid gap-2">
+                              <p className="text-xs text-muted-foreground">密码至少 10 位，包含大小写字母和特殊符号，不含空白。保存前请先停止 SnowLuma；保存后同时更新密码和自动登录凭据。</p>
+                              {snowLumaPasswordDirty ? <Button disabled={busy !== null || snowLumaRunning || !snowLumaPassword} onClick={() => void saveSnowLumaPassword()} size="sm">
+                                {busy === "snowluma:password" ? <Loader2 className="animate-spin" /> : <Save />}
+                                保存密码
+                              </Button> : null}
+                              {snowLumaPasswordDirty && snowLumaRunning ? <p className="text-xs text-warning-foreground">请先停止 SnowLuma，再保存密码。</p> : null}
+                            </div>
+                          ) : null}
                           <label className="grid gap-1.5 text-xs text-muted-foreground">
                             已输入的 QQ 账号
                             <Input readOnly className="font-mono" value={loginInfo[value].qqAccount ?? ""} placeholder="未设置账号" />

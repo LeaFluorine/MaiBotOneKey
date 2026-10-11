@@ -2940,6 +2940,11 @@ export function registerAppIpc({
     };
   });
 
+  ipcMain.handle("init:saveSnowLumaWebuiPassword", async (_event, password: string) => {
+    await serviceManager.saveSnowLumaWebuiPassword(password);
+    await broadcastSnapshot();
+  });
+
   ipcMain.handle(
     "init:setQqBackend",
     async (_event, backend: QqBackend, options?: InitRepairOptions): Promise<InitState> => {

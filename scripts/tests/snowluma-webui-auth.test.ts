@@ -74,3 +74,53 @@ test("missing, malformed or unknown credentials fall back without overwriting th
   expect(await f.auth.resolveUrl(fallback)).toBe(fallback);
   expect(await readFile(f.configPath, "utf8")).toBe("invalid json");
 });
+
+test("manual save updates both password files, preserves TOTP and restores automatic login after restart", async () => {
+  const f = await fixture();
+  await f.writePassword("OldPassword!");
+  const previous = JSON.parse(await readFile(f.configPath, "utf8"));
+  const totp = { enabled: true, secret: "fixture-secret" };
+  await f.writeConfig({ ...previous, generatedAt: "2026-01-01T00:00:00.000Z", totp });
+  f.auth.captureOutput("[WebUI] initial credentials: user=admin password=OldPassword!");
+  await f.auth.savePassword("NewPassword!");
+  const config = JSON.parse(await readFile(f.configPath, "utf8"));
+  const saved = JSON.parse(await readFile(join(f.data, "snowluma-webui-credential.json"), "utf8"));
+  expect(saved.password).toBe("NewPassword!");
+  expect(config.totp).toEqual(totp);
+  expect(config.generatedAt).toBe("2026-01-01T00:00:00.000Z");
+  expect(config.mustChangePassword).toBe(false);
+  expect(config.passwordSalt).not.toBe(previous.passwordSalt);
+  const hash = scryptSync(saved.password, Buffer.from(config.passwordSalt, "hex"), 64, { N: 16384, r: 8, p: 1 }).toString("hex");
+  expect(hash).toBe(config.passwordHash);
+  expect(new URL(await f.auth.resolveUrl(fallback)).searchParams.get("token")).toBe(saved.password);
+  const restarted = new SnowLumaWebuiAuth(f.root, f.data);
+  expect(await restarted.prepareEnvironment()).toEqual({});
+  expect(new URL(await restarted.resolveUrl(fallback)).searchParams.get("token")).toBe(saved.password);
+});
+
+test("manual save creates valid auth state without needing an old password", async () => {
+  const f = await fixture();
+  await f.auth.savePassword("FreshPassword!");
+  const config = JSON.parse(await readFile(f.configPath, "utf8"));
+  expect(config.passwordHash).toMatch(/^[a-f0-9]{128}$/u);
+  expect(config.passwordSalt).toMatch(/^[a-f0-9]{32}$/u);
+  expect(Number.isFinite(Date.parse(config.generatedAt))).toBe(true);
+  expect(Number.isFinite(Date.parse(config.updatedAt))).toBe(true);
+  expect(new URL(await f.auth.resolveUrl(fallback)).searchParams.get("token")).toBe("FreshPassword!");
+});
+
+test("invalid passwords and invalid existing config never change either file", async () => {
+  const f = await fixture();
+  await f.auth.savePassword("OriginalPassword!");
+  const beforeConfig = await readFile(f.configPath, "utf8");
+  const beforeCredential = await readFile(join(f.data, "snowluma-webui-credential.json"), "utf8");
+  for (const password of ["", "Short!A", "alllowercase!", "ALLUPPERCASE!", "NoSpecial123", "Has Space!A"]) {
+    await expect(f.auth.savePassword(password)).rejects.toThrow("密码须至少");
+  }
+  expect(await readFile(f.configPath, "utf8")).toBe(beforeConfig);
+  expect(await readFile(join(f.data, "snowluma-webui-credential.json"), "utf8")).toBe(beforeCredential);
+  await writeFile(f.configPath, "not JSON");
+  await expect(f.auth.savePassword("AnotherPassword!")).rejects.toThrow();
+  expect(await readFile(f.configPath, "utf8")).toBe("not JSON");
+  expect(await readFile(join(f.data, "snowluma-webui-credential.json"), "utf8")).toBe(beforeCredential);
+});
